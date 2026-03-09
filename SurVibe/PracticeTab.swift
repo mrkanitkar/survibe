@@ -1,10 +1,12 @@
 import SwiftUI
+import SVCore
 
 /// Practice tab — placeholder for riyaz/practice sessions.
+/// Will integrate PitchDetector and real-time feedback in Sprint 1.
 struct PracticeTab: View {
     var body: some View {
         NavigationStack {
-            VStack {
+            VStack(spacing: Spacing.md) {
                 Image(systemName: "music.note")
                     .font(.system(size: 60))
                     .foregroundStyle(.secondary)
@@ -13,10 +15,13 @@ struct PracticeTab: View {
                 Text("Riyaz practice coming in Sprint 1")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                Text("Pitch detection pipeline ready")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
             }
             .navigationTitle("Practice")
         }
-        .accessibilityLabel("Practice tab")
+        .accessibilityLabel(AccessibilityHelper.tabLabel(for: "Practice"))
     }
 }
 
