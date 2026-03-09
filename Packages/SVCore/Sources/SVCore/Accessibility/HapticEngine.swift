@@ -4,29 +4,54 @@ import UIKit
 #endif
 
 /// Haptic feedback engine for musical interaction.
-/// Full implementation in Batch 3.
-public final class HapticEngine: @unchecked Sendable {
+/// MainActor-isolated since UIKit feedback generators require main thread.
+@MainActor
+public final class HapticEngine {
     public static let shared = HapticEngine()
 
-    private init() {}
+    #if canImport(UIKit)
+    private let lightGenerator = UIImpactFeedbackGenerator(style: .light)
+    private let heavyGenerator = UIImpactFeedbackGenerator(style: .heavy)
+    private let notificationGenerator = UINotificationFeedbackGenerator()
+    #endif
+
+    private init() {
+        #if canImport(UIKit)
+        lightGenerator.prepare()
+        heavyGenerator.prepare()
+        notificationGenerator.prepare()
+        #endif
+    }
 
     /// Light tap for non-sam beats.
     public func lightTap() {
-        // Batch 3: UIImpactFeedbackGenerator(style: .light)
+        #if canImport(UIKit)
+        lightGenerator.impactOccurred()
+        lightGenerator.prepare()
+        #endif
     }
 
-    /// Heavy tap for sam beats.
+    /// Heavy tap for sam beats (first beat of a taal cycle).
     public func heavyTap() {
-        // Batch 3: UIImpactFeedbackGenerator(style: .heavy)
+        #if canImport(UIKit)
+        heavyGenerator.impactOccurred()
+        heavyGenerator.prepare()
+        #endif
     }
 
-    /// Success notification feedback.
+    /// Success notification feedback (correct note, achievement unlocked).
     public func success() {
-        // Batch 3: UINotificationFeedbackGenerator .success
+        #if canImport(UIKit)
+        notificationGenerator.notificationOccurred(.success)
+        notificationGenerator.prepare()
+        #endif
     }
 
-    /// Error notification feedback.
+    /// Error notification feedback (wrong note, session failed).
     public func error() {
-        // Batch 3: UINotificationFeedbackGenerator .error
+        #if canImport(UIKit)
+        notificationGenerator.notificationOccurred(.error)
+        notificationGenerator.prepare()
+        #endif
     }
 }

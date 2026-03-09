@@ -1,6 +1,9 @@
 import Foundation
 import AVFoundation
 import Observation
+#if canImport(UIKit)
+import UIKit
+#endif
 
 /// Microphone permission status.
 public enum MicrophonePermissionStatus: Sendable {
@@ -11,19 +14,50 @@ public enum MicrophonePermissionStatus: Sendable {
 }
 
 /// Manages microphone and other permission requests.
-/// Full implementation in Batch 5.
+/// Request in context (first practice attempt), NOT at app launch, per Apple HIG.
 @MainActor
 @Observable
 public final class PermissionManager {
     public static let shared = PermissionManager()
 
+    /// Current microphone permission status.
     public var microphoneStatus: MicrophonePermissionStatus = .notDetermined
 
-    private init() {}
+    /// Whether the user has been shown the denied state message.
+    public var hasShownDeniedMessage: Bool = false
+
+    private init() {
+        updateMicrophoneStatus()
+    }
+
+    /// Check and update the current microphone permission status.
+    public func updateMicrophoneStatus() {
+        switch AVAudioApplication.shared.recordPermission {
+        case .undetermined:
+            microphoneStatus = .notDetermined
+        case .denied:
+            microphoneStatus = .denied
+        case .granted:
+            microphoneStatus = .authorized
+        @unknown default:
+            microphoneStatus = .restricted
+        }
+    }
 
     /// Request microphone access. Call in context (first practice), NOT at launch.
+    /// Returns true if permission was granted.
     public func requestMicrophoneAccess() async -> Bool {
-        // Batch 5: AVAudioApplication.requestRecordPermission()
-        false
+        guard microphoneStatus == .notDetermined else {
+            return microphoneStatus == .authorized
+        }
+
+        let granted = await AVAudioApplication.requestRecordPermission()
+        updateMicrophoneStatus()
+        return granted
+    }
+
+    /// URL to open iOS Settings for this app (when mic access is denied).
+    public var settingsURL: URL? {
+        URL(string: UIApplication.openSettingsURLString)
     }
 }
