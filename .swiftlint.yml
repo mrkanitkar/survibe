@@ -1,0 +1,67 @@
+# SurVibe SwiftLint Configuration
+# Sprint 0: Foundation rules
+
+included:
+  - Packages
+  - SurVibe
+
+excluded:
+  - .build
+  - DerivedData
+  - Packages/*/. build
+
+# Rule configuration
+line_length:
+  warning: 120
+  error: 150
+  ignores_comments: true
+  ignores_urls: true
+
+type_body_length:
+  warning: 300
+  error: 500
+
+file_length:
+  warning: 500
+  error: 1000
+
+function_body_length:
+  warning: 50
+  error: 100
+
+# Enabled rules
+opt_in_rules:
+  - closure_spacing
+  - contains_over_filter_count
+  - empty_count
+  - empty_string
+  - fatal_error_message
+  - first_where
+  - implicit_return
+  - modifier_order
+  - overridden_super_call
+  - private_over_fileprivate
+  - redundant_nil_coalescing
+  - sorted_first_last
+  - toggle_bool
+  - unneeded_parentheses_in_closure_argument
+  - vertical_whitespace_closing_braces
+
+# Disabled rules
+disabled_rules:
+  - trailing_comma
+  - todo
+  - opening_brace
+
+# Custom rules to enforce architectural decisions
+custom_rules:
+  no_observable_object:
+    name: "No ObservableObject"
+    regex: "ObservableObject|@Published|@ObservedObject|@StateObject"
+    message: "Use @Observable (Observation framework) instead of ObservableObject/@Published. See Sprint 0 architecture decision."
+    severity: error
+  no_versioned_schema:
+    name: "No VersionedSchema"
+    regex: "VersionedSchema|SchemaMigrationPlan"
+    message: "VersionedSchema is incompatible with CloudKit sync. Use manual lightweight versioning. See Architect Review F2."
+    severity: error

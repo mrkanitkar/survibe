@@ -14,6 +14,9 @@
 		A961E74F2F5F83C400B3333D /* SVSocial in Frameworks */ = {isa = PBXBuildFile; productRef = A961E74E2F5F83C400B3333D /* SVSocial */; };
 		A961E7522F5F83D400B3333D /* SVBilling in Frameworks */ = {isa = PBXBuildFile; productRef = A961E7512F5F83D400B3333D /* SVBilling */; };
 		A961E7552F5F83EB00B3333D /* SVAdvanced in Frameworks */ = {isa = PBXBuildFile; productRef = A961E7542F5F83EB00B3333D /* SVAdvanced */; };
+		A961E75D2F5F8F1E00B3333D /* .swiftlint.yml in Resources */ = {isa = PBXBuildFile; fileRef = A961E75C2F5F8F1E00B3333D /* .swiftlint.yml */; };
+		A961E75F2F5F8F5A00B3333D /* .swift-format in Resources */ = {isa = PBXBuildFile; fileRef = A961E75E2F5F8F5A00B3333D /* .swift-format */; };
+		A961E7632F5F8FD400B3333D /* .gitignore in Resources */ = {isa = PBXBuildFile; fileRef = A961E7622F5F8FD400B3333D /* .gitignore */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -37,6 +40,9 @@
 		A961E7122F5F808000B3333D /* SurVibe.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SurVibe.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A961E7232F5F808100B3333D /* SurVibeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SurVibeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A961E72D2F5F808100B3333D /* SurVibeUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SurVibeUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A961E75C2F5F8F1E00B3333D /* .swiftlint.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = .swiftlint.yml; sourceTree = "<group>"; };
+		A961E75E2F5F8F5A00B3333D /* .swift-format */ = {isa = PBXFileReference; lastKnownFileType = text; path = ".swift-format"; sourceTree = "<group>"; };
+		A961E7622F5F8FD400B3333D /* .gitignore */ = {isa = PBXFileReference; lastKnownFileType = text; path = .gitignore; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -109,6 +115,9 @@
 				A961E7262F5F808100B3333D /* SurVibeTests */,
 				A961E7302F5F808100B3333D /* SurVibeUITests */,
 				A961E7132F5F808000B3333D /* Products */,
+				A961E75C2F5F8F1E00B3333D /* .swiftlint.yml */,
+				A961E75E2F5F8F5A00B3333D /* .swift-format */,
+				A961E7622F5F8FD400B3333D /* .gitignore */,
 			);
 			sourceTree = "<group>";
 		};
@@ -258,6 +267,9 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A961E7632F5F8FD400B3333D /* .gitignore in Resources */,
+				A961E75D2F5F8F1E00B3333D /* .swiftlint.yml in Resources */,
+				A961E75F2F5F8F5A00B3333D /* .swift-format in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

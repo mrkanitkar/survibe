@@ -14,3 +14,12 @@ xcuserdata/
 # Swift Package Manager
 .build/
 Packages/*/. build/
+
+# CI Scripts
+ci_scripts/*.log
+
+# SwiftLint
+.swiftlint.yml.bak
+
+# Swift Format
+.swift-format.bak
