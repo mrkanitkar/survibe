@@ -4,6 +4,8 @@ import AVFoundation
 /// via AVAudioUnitSampler connected to AudioEngineManager's engine.
 @MainActor
 public final class SoundFontManager {
+    // MARK: - Properties
+
     public static let shared = SoundFontManager()
 
     /// Reference to the engine's sampler node.
@@ -14,7 +16,11 @@ public final class SoundFontManager {
     /// Whether a SoundFont is currently loaded.
     public private(set) var isLoaded: Bool = false
 
+    // MARK: - Initialization
+
     private init() {}
+
+    // MARK: - Public Methods
 
     /// Load a SoundFont bank instrument into the sampler.
     /// - Parameters:

@@ -1,17 +1,36 @@
-import Foundation
 import AVFoundation
 import Accelerate
-import AudioKit
-import SoundpipeAudioKit
+import os.log
+
+/// Module-level logger — not actor-isolated, safe to use from any context.
+private let pitchLogger = Logger(
+    subsystem: "com.survibe",
+    category: "PitchDetector"
+)
+
+/// Thread-safe counter for buffer diagnostics.
+private final class AtomicCounter: @unchecked Sendable {
+    private var _value: Int = 0
+    private let lock = NSLock()
+
+    var value: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return _value
+    }
+
+    @discardableResult
+    func increment() -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        _value += 1
+        return _value
+    }
+}
 
 /// Autocorrelation-based pitch detector using Accelerate/vDSP.
 /// Uses direct AVAudioEngine installTap for buffer access.
-///
-/// Note: PitchTap (SoundpipeAudioKit) requires AudioKit's Node graph which
-/// conflicts with the single AVAudioEngine + AVAudioUnitSampler pattern.
-/// This detector uses FFT-based autocorrelation as an alternative approach.
-/// AudioKit/SoundpipeAudioKit imports are retained for future PitchTap integration
-/// if engine architecture changes in Sprint 2+.
+/// DSP runs on a dedicated queue to avoid blocking the real-time audio thread.
 @MainActor
 public final class AudioKitPitchDetector: PitchDetectorProtocol {
     private var continuation: AsyncStream<PitchResult>.Continuation?
@@ -20,56 +39,142 @@ public final class AudioKitPitchDetector: PitchDetectorProtocol {
     /// Reference pitch for frequency-to-note conversion (default: A4 = 440 Hz).
     public var referencePitch: Double = 440.0
 
+    /// Number of audio buffers received (for diagnostics).
+    public private(set) var bufferCount: Int = 0
+
+    /// Last measured amplitude (for diagnostics / live meter).
+    public private(set) var lastAmplitude: Double = 0
+
+    /// Current detector status for UI feedback.
+    public private(set) var status: String = "Idle"
+
+    /// Dedicated queue for DSP processing — keeps audio render thread clear.
+    private let processingQueue = DispatchQueue(
+        label: "com.survibe.pitch-detection",
+        qos: .userInteractive
+    )
+
     public init() {}
 
     public func start() -> AsyncStream<PitchResult> {
-        let stream = AsyncStream<PitchResult> { [weak self] continuation in
-            guard let self else {
-                continuation.finish()
-                return
-            }
+        // Stop any previous session
+        stopInternal()
+        bufferCount = 0
+        lastAmplitude = 0
+        status = "Starting..."
+
+        let refPitch = referencePitch
+
+        let stream = AsyncStream<PitchResult>(
+            bufferingPolicy: .bufferingNewest(1)
+        ) { continuation in
             self.continuation = continuation
             self.isDetecting = true
+            self.status = "Installing mic tap..."
 
-            let refPitch = self.referencePitch
+            // Capture only what the tap closure needs — no `self` capture.
+            // This avoids actor-isolation issues since the closure is @Sendable.
+            let queue = self.processingQueue
+            let counter = AtomicCounter()
 
             AudioEngineManager.shared.installMicTap { buffer, _ in
-                guard let channelData = buffer.floatChannelData?[0] else { return }
+                // Audio render thread — only copy data, do NOT do heavy work here.
+                guard let channelData = buffer.floatChannelData?[0] else {
+                    return
+                }
                 let frameLength = Int(buffer.frameLength)
-
-                let frequency = AudioKitPitchDetector.detectPitch(
-                    buffer: channelData,
-                    frameCount: frameLength,
-                    sampleRate: buffer.format.sampleRate
+                guard frameLength > 0 else { return }
+                let sampleRate = buffer.format.sampleRate
+                let samples = Array(
+                    UnsafeBufferPointer(start: channelData, count: frameLength)
                 )
 
-                guard frequency > 0 else { return }
+                let count = counter.increment()
+                // Log every 50th buffer to confirm tap is firing
+                if count % 50 == 1 {
+                    pitchLogger.info(
+                        "Tap buffer #\(count): frames=\(frameLength) rate=\(sampleRate)"
+                    )
+                }
 
-                // Calculate amplitude (RMS)
-                var rms: Float = 0
-                vDSP_rmsqv(channelData, 1, &rms, vDSP_Length(frameLength))
-                let amplitude = Double(rms)
+                // Dispatch all processing to dedicated queue
+                queue.async {
+                    let amplitude = Self.calculateRMS(samples)
 
-                guard amplitude > 0.01 else { return }
+                    // Log amplitude periodically to see if mic is picking up sound
+                    if count % 50 == 1 {
+                        pitchLogger.info(
+                            "Buffer #\(count) amp=\(String(format: "%.6f", amplitude))"
+                        )
+                    }
 
-                let (noteName, octave, cents) = SwarUtility.frequencyToNote(frequency, referencePitch: refPitch)
-                let confidence = min(1.0, amplitude * 2.0)
+                    // Always yield amplitude-only result so UI can show live level
+                    // Use frequency=0 to indicate "no pitch detected"
+                    if amplitude <= 0.002 {
+                        let silentResult = PitchResult(
+                            frequency: 0,
+                            amplitude: amplitude,
+                            noteName: "",
+                            octave: 0,
+                            centsOffset: 0,
+                            confidence: 0
+                        )
+                        continuation.yield(silentResult)
+                        return
+                    }
 
-                let result = PitchResult(
-                    frequency: frequency,
-                    amplitude: amplitude,
-                    noteName: noteName,
-                    octave: octave,
-                    centsOffset: cents,
-                    confidence: confidence
-                )
-                continuation.yield(result)
+                    let frequency = Self.detectPitch(
+                        samples: samples,
+                        sampleRate: sampleRate
+                    )
+
+                    // Log DSP results periodically
+                    if count % 20 == 1 {
+                        pitchLogger.info(
+                            "DSP: amp=\(String(format: "%.4f", amplitude)) freq=\(String(format: "%.1f", frequency))"
+                        )
+                    }
+
+                    if frequency > 0 {
+                        let (noteName, octave, cents) =
+                            SwarUtility.frequencyToNote(
+                                frequency, referencePitch: refPitch
+                            )
+                        let confidence = min(1.0, amplitude * 2.0)
+
+                        let result = PitchResult(
+                            frequency: frequency,
+                            amplitude: amplitude,
+                            noteName: noteName,
+                            octave: octave,
+                            centsOffset: cents,
+                            confidence: confidence
+                        )
+                        pitchLogger.info(
+                            "DETECTED: \(noteName)\(octave) \(String(format: "%.1f", frequency))Hz amp=\(String(format: "%.4f", amplitude))"
+                        )
+                        continuation.yield(result)
+                    } else {
+                        // Yield amplitude-only so UI knows mic is working
+                        let noFreqResult = PitchResult(
+                            frequency: 0,
+                            amplitude: amplitude,
+                            noteName: "",
+                            octave: 0,
+                            centsOffset: 0,
+                            confidence: 0
+                        )
+                        continuation.yield(noFreqResult)
+                    }
+                }
             }
+
+            self.status = "Listening"
+            pitchLogger.info("Pitch detector started, mic tap installed")
 
             continuation.onTermination = { _ in
                 Task { @MainActor in
-                    self.isDetecting = false
-                    AudioEngineManager.shared.removeMicTap()
+                    self.stopInternal()
                 }
             }
         }
@@ -77,33 +182,56 @@ public final class AudioKitPitchDetector: PitchDetectorProtocol {
     }
 
     public func stop() {
+        stopInternal()
+    }
+
+    /// Internal cleanup — removes tap and finishes stream.
+    private func stopInternal() {
+        guard isDetecting else { return }
         isDetecting = false
+        status = "Stopped"
         AudioEngineManager.shared.removeMicTap()
         continuation?.finish()
         continuation = nil
+        pitchLogger.info("Pitch detector stopped")
     }
 
-    // MARK: - Autocorrelation Pitch Detection (vDSP)
+    // MARK: - DSP (nonisolated static — safe to call from any thread)
+
+    /// Calculate RMS amplitude from audio samples.
+    nonisolated private static func calculateRMS(_ samples: [Float]) -> Double {
+        var rms: Float = 0
+        samples.withUnsafeBufferPointer { ptr in
+            guard let base = ptr.baseAddress else { return }
+            vDSP_rmsqv(base, 1, &rms, vDSP_Length(samples.count))
+        }
+        return Double(rms)
+    }
 
     /// Autocorrelation-based pitch detection using Accelerate vDSP.
-    /// Uses vDSP_correlate for proper normalized autocorrelation.
-    nonisolated private static func detectPitch( // swiftlint:disable:this cyclomatic_complexity
-        buffer: UnsafePointer<Float>,
-        frameCount: Int,
+    nonisolated private static func detectPitch(
+        samples: [Float],
         sampleRate: Double
     ) -> Double {
+        let frameCount = samples.count
         let halfLength = frameCount / 2
-        guard halfLength > 0 else { return 0 }
+        guard halfLength > 2 else { return 0 }
 
         // Compute autocorrelation via dot product at each lag
         var autocorrelation = [Float](repeating: 0, count: halfLength)
-        let bufferArray = Array(UnsafeBufferPointer(start: buffer, count: frameCount))
 
-        bufferArray.withUnsafeBufferPointer { bufPtr in
+        samples.withUnsafeBufferPointer { bufPtr in
             guard let baseAddress = bufPtr.baseAddress else { return }
             for lag in 0..<halfLength {
                 var sum: Float = 0
-                vDSP_dotpr(baseAddress, 1, baseAddress + lag, 1, &sum, vDSP_Length(halfLength))
+                let count = vDSP_Length(halfLength - lag)
+                guard count > 0 else { continue }
+                vDSP_dotpr(
+                    baseAddress, 1,
+                    baseAddress + lag, 1,
+                    &sum,
+                    count
+                )
                 autocorrelation[lag] = sum
             }
         }
@@ -111,13 +239,18 @@ public final class AudioKitPitchDetector: PitchDetectorProtocol {
         // Normalize by the zero-lag value
         guard autocorrelation[0] > 0 else { return 0 }
         var invNorm: Float = 1.0 / autocorrelation[0]
-        // Use separate output to avoid overlapping access
         var normalized = [Float](repeating: 0, count: halfLength)
-        vDSP_vsmul(&autocorrelation, 1, &invNorm, &normalized, 1, vDSP_Length(halfLength))
+        vDSP_vsmul(
+            &autocorrelation, 1, &invNorm, &normalized, 1,
+            vDSP_Length(halfLength)
+        )
         autocorrelation = normalized
 
         // Find first peak after the initial decline
-        let minLag = Int(sampleRate / 4000.0) // Max detectable ~4000 Hz
+        // Min lag: sampleRate / 4000 Hz, but at least 2
+        let minLag = max(2, Int(sampleRate / 4000.0))
+        guard minLag < halfLength else { return 0 }
+
         var bestLag = 0
         var bestVal: Float = 0
         var declining = true
@@ -130,12 +263,14 @@ public final class AudioKitPitchDetector: PitchDetectorProtocol {
                 bestVal = autocorrelation[lag]
                 bestLag = lag
             }
-            if !declining && autocorrelation[lag] < autocorrelation[lag - 1] {
+            if !declining
+                && autocorrelation[lag] < autocorrelation[lag - 1]
+            {
                 break
             }
         }
 
-        guard bestLag > 0, bestVal > 0.3 else { return 0 }
+        guard bestLag > 0, bestVal > 0.2 else { return 0 }
 
         // Parabolic interpolation for sub-sample accuracy
         let refinedLag: Double
@@ -153,6 +288,7 @@ public final class AudioKitPitchDetector: PitchDetectorProtocol {
             refinedLag = Double(bestLag)
         }
 
+        guard refinedLag > 0 else { return 0 }
         let frequency = sampleRate / refinedLag
         return (frequency > 50 && frequency < 4000) ? frequency : 0
     }

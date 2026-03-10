@@ -4,6 +4,7 @@ import PackageDescription
 
 let package = Package(
     name: "SVSocial",
+    defaultLocalization: "en",
     platforms: [.iOS(.v26)],
     products: [
         .library(name: "SVSocial", targets: ["SVSocial"]),
@@ -18,7 +19,8 @@ let package = Package(
             dependencies: [
                 .product(name: "SVCore", package: "SVCore"),
                 .product(name: "SVAudio", package: "SVAudio"),
-            ]
+            ],
+            resources: [.process("Resources")]
         ),
         .testTarget(
             name: "SVSocialTests",

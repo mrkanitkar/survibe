@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 
 /// Rang (color) system mapping musical achievement levels to colors.
@@ -26,14 +27,14 @@ public enum RangLevel: Int, CaseIterable, Sendable {
         }
     }
 
-    /// English description of the proficiency level.
+    /// Localized description of the proficiency level.
     public var proficiencyLabel: String {
         switch self {
-        case .neel: "Beginner"
-        case .hara: "Developing"
-        case .peela: "Intermediate"
-        case .lal: "Advanced"
-        case .sona: "Master"
+        case .neel: String(localized: "Beginner", bundle: .module)
+        case .hara: String(localized: "Developing", bundle: .module)
+        case .peela: String(localized: "Intermediate", bundle: .module)
+        case .lal: String(localized: "Advanced", bundle: .module)
+        case .sona: String(localized: "Master", bundle: .module)
         }
     }
 

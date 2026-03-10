@@ -27,7 +27,7 @@ final class SurVibeUITests: XCTestCase {
 
         // Navigate through all tabs
         app.tabBars.buttons["Practice"].tap()
-        XCTAssertTrue(app.navigationBars["Practice"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.navigationBars["Pitch Detection"].waitForExistence(timeout: 2))
 
         app.tabBars.buttons["Songs"].tap()
         XCTAssertTrue(app.navigationBars["Songs"].waitForExistence(timeout: 2))

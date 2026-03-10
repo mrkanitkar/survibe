@@ -4,6 +4,7 @@ import PackageDescription
 
 let package = Package(
     name: "SVCore",
+    defaultLocalization: "en",
     platforms: [.iOS(.v26)],
     products: [
         .library(name: "SVCore", targets: ["SVCore"]),
@@ -16,7 +17,8 @@ let package = Package(
             name: "SVCore",
             dependencies: [
                 .product(name: "PostHog", package: "posthog-ios"),
-            ]
+            ],
+            resources: [.process("Resources")]
         ),
         .testTarget(
             name: "SVCoreTests",

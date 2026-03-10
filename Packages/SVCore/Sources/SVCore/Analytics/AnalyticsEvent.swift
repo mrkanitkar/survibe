@@ -11,4 +11,7 @@ public enum AnalyticsEvent: String, Sendable {
     case tabSelected = "tab_selected"
     case sessionStarted = "session_started"
     case sessionEnded = "session_ended"
+
+    // Settings events
+    case languageChanged = "language_changed"
 }

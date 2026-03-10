@@ -37,10 +37,9 @@ SurVibeApp (top-level, imports all 7)
 | Package | URL | Min Version | Used By |
 |---------|-----|-------------|---------|
 | AudioKit | https://github.com/AudioKit/AudioKit | 5.6.0 | SVAudio |
-| SoundpipeAudioKit | https://github.com/AudioKit/SoundpipeAudioKit | 5.6.0 | SVAudio (PitchTap) |
-| AudioKit Microtonality | https://github.com/AudioKit/Microtonality | Latest | SVAudio (22 shruti) |
+| SoundpipeAudioKit | https://github.com/AudioKit/SoundpipeAudioKit | 5.6.0 | SVAudio (DSP utilities) |
+| AudioKit Microtonality | https://github.com/AudioKit/Microtonality | `branch: main` | SVAudio (22 shruti) |
 | PostHog iOS | https://github.com/PostHog/posthog-ios | 3.0.0 | SVCore |
-| SwiftLintPlugins | https://github.com/SimplyDanny/SwiftLintPlugins | 0.57.0 | All packages |
 
 **NEVER add a dependency without explicit approval.** Prefer Apple frameworks over third-party.
 
@@ -100,14 +99,22 @@ SurVibeApp (top-level, imports all 7)
 ### Single AVAudioEngine (WWDC 2014/2019)
 - ONE `AVAudioEngine` instance via `AudioEngineManager.shared` singleton.
 - NEVER create a second engine.
-- Nodes: AVAudioInputNode (mic), AVAudioUnitSampler (SoundFont), AVAudioPlayerNode×2 (tanpura, tabla), main mixer.
+- Nodes: AVAudioInputNode (mic), AVAudioUnitSampler (SoundFont), AVAudioPlayerNode×2 (tanpura, metronome), main mixer.
 - Engine starts ONLY when user enters practice mode, NOT at app launch.
 
 ### Pitch Detection
-- PitchTap from **SoundpipeAudioKit** (NOT main AudioKit package).
-- Default buffer: 2048 samples (~46ms latency, within 50ms target).
-- User-configurable to 4096 in Advanced Settings (~93ms, better low-note resolution).
-- Fallback: direct `AVAudioInputNode.installTap` + YIN algorithm using `Accelerate/vDSP`.
+- Two implementations behind `PitchDetectorProtocol` (defined in `SVAudio/Pitch/PitchDetector.swift`):
+  1. **AudioKitPitchDetector** — autocorrelation via `vDSP_dotpr` + `vDSP_vsmul` (primary).
+  2. **YINPitchDetector** — YIN algorithm using `Accelerate/vDSP` (fallback).
+- Chord detection uses `LatencyPreset` for user-configurable FFT window sizes:
+  - **Ultra Fast**: 1024 samples (~23ms) — fastest response, lower frequency resolution
+  - **Fast** (default): 2048 samples (~46ms) — good for C3 and above
+  - **Balanced**: 4096 samples (~93ms) — full range, better accuracy
+  - **Precise**: 8192 samples (~186ms) — low bass, complex chords
+- Melody detection (autocorrelation) uses the engine's fixed 2048-sample buffer.
+- Both return `AsyncStream<PitchResult>` (frequency, amplitude, note name, octave, cents offset, confidence).
+- Shared frequency-to-note conversion in `SwarUtility.swift` using `Swar.allCases`.
+- **Note:** PitchTap from SoundpipeAudioKit conflicts with single-engine pattern; re-evaluate in Sprint 2.
 
 ### Audio Session
 ```swift
@@ -163,9 +170,9 @@ import SwiftUI
 Every public type and method MUST have documentation:
 
 ```swift
-/// Detects pitch from microphone input using AudioKit's PitchTap.
+/// Detects pitch from microphone input using autocorrelation via vDSP.
 ///
-/// Uses SoundpipeAudioKit's PitchTap with a configurable buffer size.
+/// Uses a configurable buffer size for FFT analysis.
 /// Default buffer of 2048 samples provides ~46ms latency.
 ///
 /// - Parameters:
@@ -247,6 +254,44 @@ struct UserProfileTests {
 
 ---
 
+## LOCALIZATION RULES
+
+### String Catalogs (.xcstrings)
+- One `.xcstrings` catalog per package with user-facing strings (NOT centralized).
+- Main app target: `SurVibe/Localizable.xcstrings`
+- SPM packages: `{Package}/Sources/{Package}/Resources/Localizable.xcstrings`
+- `SurVibe/InfoPlist.xcstrings` for privacy strings (NSMicrophoneUsageDescription).
+
+### Localization Patterns
+| Context | Pattern |
+|---------|---------|
+| SwiftUI views (app target) | `Text("Your string")` — auto-extracted |
+| SwiftUI views (SPM package) | `Text("Your string", bundle: .module)` |
+| Non-SwiftUI (app target) | `String(localized: "key")` |
+| Non-SwiftUI (SPM package) | `String(localized: "key", bundle: .module)` |
+| Non-localizable display text | `Text(verbatim: value)` |
+| Technical/debug strings | Plain string literal (no localization) |
+
+### What NOT to Localize
+- Sargam note names: Sa, Re, Ga, Ma, Pa, Dha, Ni (proper nouns across all Indian languages)
+- Devanagari labels: सा, रे, ग, म, प, ध, नि
+- Western note names: C, D, E, F, G, A, B
+- Rang color names: Neel, Hara, Peela, Lal, Sona
+- Brand: "SurVibe"
+- Analytics events, debug strings, queue labels, logger messages
+
+### Adding a New Language
+1. Register ISO 639 code in `knownRegions` (project.pbxproj) — already done for all 22.
+2. Add `"xx": { "stringUnit": { "state": "translated", "value": "..." } }` entries in each `.xcstrings` file.
+3. No new files, directories, or dependencies needed.
+
+### RTL Support (Urdu, Sindhi, Kashmiri)
+- SwiftUI handles RTL automatically when using `.leading`/`.trailing`.
+- NEVER use `.left`/`.right` for layout alignment.
+- Piano keyboard and music notation MUST be forced LTR: `.environment(\.layoutDirection, .leftToRight)`.
+
+---
+
 ## ANALYTICS RULES
 
 ### PostHog Events — SVCore.AnalyticsManager ONLY
@@ -256,10 +301,13 @@ struct UserProfileTests {
 - Property names: `snake_case` — `frequency_hz`, `latency_ms`.
 - Privacy: no IP collection, no device fingerprinting, no IDFA, privacy mode ON.
 
-### Sprint 0 Verification Events
+### Defined Events (AnalyticsEvent enum in SVCore)
 - `app_scaffolding_loaded` — fires on every app launch
 - `audio_poc_pitch_detected` — fires when pitch detection succeeds
 - `cloudkit_sync_completed` — fires when CloudKit sync round-trips
+- `tab_selected` — fires on tab navigation (property: `tab`)
+- `session_started` — fires when practice session begins
+- `session_ended` — fires when practice session ends
 
 ---
 
@@ -278,7 +326,7 @@ struct UserProfileTests {
 **Rules:**
 - Peela and Sona: ONLY for backgrounds, large text (18pt+), decorative, icons with labels.
 - Body text on light backgrounds: use Peela Dark / Sona Dark.
-- ALL colors defined as `Color` extensions in `SVCore/Theme/RangColors.swift`.
+- ALL colors defined in `SVCore/Theme/RangColorSystem.swift` with `Color` extensions in `SVCore/Extensions/Color+Rang.swift`.
 - Dark mode: provide all variants (Asset Catalog with light/dark appearances).
 
 ---
@@ -287,8 +335,8 @@ struct UserProfileTests {
 
 ### Build-Time Enforcement
 - **Swift 6 language mode** — SPM packages enforce strict concurrency via `swift-tools-version: 6.2`
-- **App target**: Swift 6 with `SWIFT_APPROACHABLE_CONCURRENCY = YES`, `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`
-- **`SWIFT_TREAT_WARNINGS_AS_ERRORS = YES`** in Release configuration — no warnings ship to users
+- **App target**: `SWIFT_VERSION = 5.0` in pbxproj, with `SWIFT_APPROACHABLE_CONCURRENCY = YES`, `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` (Swift 6 concurrency semantics via approachable mode)
+- **`SWIFT_TREAT_WARNINGS_AS_ERRORS = YES`** recommended for Release configuration — no warnings ship to users
 
 ### Two Formatting/Lint Tools (Both Required)
 1. **swift-format** (Xcode toolchain: `xcrun swift-format`) — code formatting. Config: `.swift-format`.
@@ -323,7 +371,7 @@ xcrun swift-format lint --configuration .swift-format <file>
 | Workflow | Trigger | Actions |
 |----------|---------|---------|
 | Build Check | Every push to main + PRs | xcodebuild, swift-format lint, SwiftLint |
-| Test Suite | Nightly + PR merge | Unit tests (all 8 packages) |
+| Test Suite | Nightly + PR merge | Unit tests (7 packages + app target) |
 | TestFlight | Tag push (v0.x.x) | Archive + upload to TestFlight |
 
 ### ci_post_clone.sh
@@ -417,6 +465,72 @@ Before writing any code, follow this checklist:
 
 ---
 
+## APP STRUCTURE
+
+### 4-Tab Navigation
+| Tab | View | Icon | Purpose |
+|-----|------|------|---------|
+| Learn | `LearnTab` | `book.fill` | Lessons, sargam notation, guided learning |
+| Practice | `PracticeTab` | `music.note` | Free practice with pitch detection + tanpura |
+| Songs | `SongsTab` | `music.note.list` | Song library, play-along, progress tracking |
+| Profile | `ProfileTab` | `person.fill` | XP, achievements, rang level, settings |
+
+### @Model Classes (Main App Target)
+SwiftData models live in `SurVibe/Models/` (NOT in SVCore) because CloudKit sync requires models + container in the same module. Packages reference model shapes via protocols in `SVCore/Models/`.
+
+| Model | Purpose | Key Fields |
+|-------|---------|------------|
+| `UserProfile` | Player identity, XP, rang level | `displayName`, `totalXP`, `currentRang` |
+| `RiyazEntry` | Daily practice log (additive-only) | `date`, `durationMinutes`, `notes` |
+| `Achievement` | Earned badges (append-only) | `type`, `earnedDate`, `isUnlocked` |
+| `SongProgress` | Per-song scores (max-wins) | `songId`, `bestScore`, `timesPlayed`, `isCompleted` |
+| `LessonProgress` | Per-lesson completion (one-way flag) | `lessonId`, `isCompleted`, `completedDate` |
+| `SubscriptionState` | StoreKit 2 local cache | `tier`, `expirationDate`, `isActive` |
+
+### Swar (Note) System
+The `Swar` enum in `SVAudio/Models/Note.swift` defines the 12 notes of Indian classical music:
+
+| Swar | Raw Value | MIDI Offset | Western Equivalent |
+|------|-----------|-------------|-------------------|
+| Sa | "Sa" | 0 | C (tonic) |
+| Komal Re | "Komal Re" | 1 | Db |
+| Re | "Re" | 2 | D |
+| Komal Ga | "Komal Ga" | 3 | Eb |
+| Ga | "Ga" | 4 | E |
+| Ma | "Ma" | 5 | F |
+| Tivra Ma | "Tivra Ma" | 6 | F# |
+| Pa | "Pa" | 7 | G |
+| Komal Dha | "Komal Dha" | 8 | Ab |
+| Dha | "Dha" | 9 | A |
+| Komal Ni | "Komal Ni" | 10 | Bb |
+| Ni | "Ni" | 11 | B |
+
+- Frequency calculation: `frequency(octave:referencePitch:)` — defaults to octave 4, A4 = 440 Hz.
+- Sa is relative to the performer's chosen pitch (not fixed to C).
+
+### Playback
+- **TanpuraPlayer** — looped drone using `AVAudioPCMBuffer` with `.loops` option. Provides tonic reference (Sa-Pa drone).
+- **MetronomePlayer** — pre-loaded click buffer, single `play()` call, BPM adjustable via timer. Full `AVAudioTime` scheduling deferred to Sprint 1.
+- **SoundFontManager** — `AVAudioUnitSampler` with `loadSoundBankInstrument(at:program:bankMSB:bankLSB:)`. Piano SoundFont for note playback.
+
+---
+
+## KNOWN DEFERRED ITEMS (Sprint 1+)
+
+These items were identified in the Sprint 0 architect review and intentionally deferred:
+
+| ID | Item | Sprint |
+|----|------|--------|
+| H5 | AudioEngineManager node format ordering (configure session before connecting nodes) | Sprint 1 |
+| H8 | MetronomePlayer: replace `DispatchSourceTimer` with `AVAudioTime`-based scheduling | Sprint 1 |
+| M9 | SVCore model protocols not marked `: Sendable` | Sprint 1 |
+| M10 | Rang colors: add Dark Mode variants in Asset Catalog | Sprint 1 |
+| M12 | RiyazEntry one-entry-per-day invariant (application-level enforcement) | Sprint 1 |
+| M15 | YINPitchDetector: optimize O(n²) difference function with vDSP FFT | Sprint 1 |
+| C4 | Re-evaluate PitchTap vs autocorrelation for primary pitch detection | Sprint 2 |
+
+---
+
 ## INDIAN MUSIC CONTEXT
 
 SurVibe teaches piano through Indian classical music. Key terminology:
@@ -437,13 +551,24 @@ When generating UI text, use these Hindi/Urdu music terms naturally. The app's p
 
 ## REFERENCE DOCUMENTS
 
-These documents contain the full architectural decisions. Consult them when making significant changes:
-- `SurVibe_Design_Thinking_v5_GapAnalysis.docx` — product strategy, personas, features
+These documents in `docs/` contain the full architectural decisions. Consult them when making significant changes:
+
+### Primary References
 - `SurVibe_Software_Architecture_v1.docx` — full technical architecture (25 decisions)
+- `SurVibe_Design_Thinking_v5_GapAnalysis.docx` — product strategy, personas, features
 - `SurVibe_Sprint0_Implementation.docx` — Sprint 0 day-by-day plan with quality gates
+- `Sprint0_Gap_Report.md` — architect review: all fixes applied, deferred items listed
 - `SurVibe_Dependencies_Report.docx` — external dependencies and costs
+
+### Architecture Decision Records
+- `SurVibe_Hostile_Review_Round2.docx` — adversarial architecture review
+- `SurVibe_Architecture_Pattern_Comparison.docx` — pattern evaluation
+- `SurVibe_Architecture_Q2_Q3_Comparison.docx` — SwiftData vs Core Data, sync strategy
+- `SurVibe_Architecture_Q4_Q5_Q6_Comparison.docx` — audio, pitch detection, permissions
+- `SurVibe_Architecture_Q13_CICD.docx` — CI/CD pipeline decisions
+- `SurVibe_Architecture_Q15_Q22_Comparison.docx` — gamification, onboarding
 
 ---
 
-*Last updated: March 2026 | Version 3.0 (Enforcement Pipeline)*
-*Covers: 25 architecture decisions, 21 architect review fixes, enforcement pipeline (SwiftLint + swift-format + pre-commit hook + CI gates)*
+*Last updated: March 2026 | Version 3.1 (Audit Pass)*
+*Covers: 25 architecture decisions, 21 architect review fixes, enforcement pipeline, app structure, deferred items*

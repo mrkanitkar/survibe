@@ -1,10 +1,14 @@
-import SwiftUI
 import SVCore
+import SwiftUI
 
 /// Root content view with 4-tab navigation.
 /// Tracks tab selection events via AnalyticsManager.
 struct ContentView: View {
+    // MARK: - Properties
+
     @State private var selectedTab = "Learn"
+
+    // MARK: - Body
 
     var body: some View {
         TabView(selection: $selectedTab) {

@@ -1,27 +1,26 @@
+import Foundation
 import SwiftUI
 
 /// Accessibility helpers for VoiceOver labels and announcements.
 public enum AccessibilityHelper {
-    /// VoiceOver-friendly pronunciations for all 12 swar notes.
-    private static let voiceOverNames: [String: String] = [
-        "Sa": "Sa, the tonic note",
-        "Komal Re": "Komal Re, flat second",
-        "Re": "Re, the second note",
-        "Komal Ga": "Komal Ga, flat third",
-        "Ga": "Ga, the third note",
-        "Ma": "Ma, the fourth note",
-        "Tivra Ma": "Tivra Ma, sharp fourth",
-        "Pa": "Pa, the fifth note",
-        "Komal Dha": "Komal Dha, flat sixth",
-        "Dha": "Dha, the sixth note",
-        "Komal Ni": "Komal Ni, flat seventh",
-        "Ni": "Ni, the seventh note"
-    ]
-
     /// Generate VoiceOver label for a swar note.
     /// Provides the full note name for screen reader pronunciation.
     public static func swarLabel(for noteName: String) -> String {
-        voiceOverNames[noteName] ?? noteName
+        switch noteName {
+        case "Sa": String(localized: "Sa, the tonic note", bundle: .module)
+        case "Komal Re": String(localized: "Komal Re, flat second", bundle: .module)
+        case "Re": String(localized: "Re, the second note", bundle: .module)
+        case "Komal Ga": String(localized: "Komal Ga, flat third", bundle: .module)
+        case "Ga": String(localized: "Ga, the third note", bundle: .module)
+        case "Ma": String(localized: "Ma, the fourth note", bundle: .module)
+        case "Tivra Ma": String(localized: "Tivra Ma, sharp fourth", bundle: .module)
+        case "Pa": String(localized: "Pa, the fifth note", bundle: .module)
+        case "Komal Dha": String(localized: "Komal Dha, flat sixth", bundle: .module)
+        case "Dha": String(localized: "Dha, the sixth note", bundle: .module)
+        case "Komal Ni": String(localized: "Komal Ni, flat seventh", bundle: .module)
+        case "Ni": String(localized: "Ni, the seventh note", bundle: .module)
+        default: noteName
+        }
     }
 
     /// Generate VoiceOver label for a tab.
@@ -38,11 +37,11 @@ public enum AccessibilityHelper {
     public static func pitchAccuracyLabel(centsOffset: Double) -> String {
         let absOffset = abs(centsOffset)
         if absOffset < 5 {
-            return "In tune"
+            return String(localized: "In tune", bundle: .module)
         } else if centsOffset > 0 {
-            return "Sharp by \(Int(absOffset)) cents"
+            return String(localized: "Sharp by \(Int(absOffset)) cents", bundle: .module)
         } else {
-            return "Flat by \(Int(absOffset)) cents"
+            return String(localized: "Flat by \(Int(absOffset)) cents", bundle: .module)
         }
     }
 

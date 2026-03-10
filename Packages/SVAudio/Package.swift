@@ -4,6 +4,7 @@ import PackageDescription
 
 let package = Package(
     name: "SVAudio",
+    defaultLocalization: "en",
     platforms: [.iOS(.v26)],
     products: [
         .library(name: "SVAudio", targets: ["SVAudio"]),
@@ -22,7 +23,8 @@ let package = Package(
                 .product(name: "AudioKit", package: "AudioKit"),
                 .product(name: "SoundpipeAudioKit", package: "SoundpipeAudioKit"),
                 .product(name: "Microtonality", package: "Microtonality"),
-            ]
+            ],
+            resources: [.process("Resources")]
         ),
         .testTarget(
             name: "SVAudioTests",

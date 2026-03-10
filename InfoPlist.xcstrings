@@ -1,0 +1,161 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "CFBundleName" : {
+      "comment" : "Bundle name",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "SurVibe"
+          }
+        }
+      }
+    },
+    "NSMicrophoneUsageDescription" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SurVibe needs microphone access to detect the notes you play on your piano and provide real-time feedback."
+          }
+        },
+        "as" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "আপুনি পিয়ানোত বজোৱা নোটবোৰ চিনাক্ত কৰিবলৈ আৰু ৰিয়েল-টাইম ফিডবেক দিবলৈ SurVibe ক মাইক্ৰ'ফোন এক্সেছ লাগে।"
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SurVibe को आपके पियानो पर बजाए गए नोट्स को पहचानने और रीयल-टाइम फ़ीडबैक देने के लिए माइक्रोफ़ोन एक्सेस चाहिए।"
+          }
+        },
+        "kn" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ನಿಮ್ಮ ಪಿಯಾನೋದಲ್ಲಿ ನೀವು ನುಡಿಸುವ ಸ್ವರಗಳನ್ನು ಗುರುತಿಸಲು ಮತ್ತು ನೈಜ-ಸಮಯದ ಪ್ರತಿಕ್ರಿಯೆ ನೀಡಲು SurVibe ಗೆ ಮೈಕ್ರೋಫೋನ್ ಪ್ರವೇಶ ಅಗತ್ಯವಿದೆ."
+          }
+        },
+        "kok" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "तुमी पियानोचेर वाजयिल्ले नोट्स वळखूंक आनी रीयल-टाइम फीडबॅक दिवंक SurVibe क मायक्रोफोन एक्सेस जाय।"
+          }
+        },
+        "mai" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "अहाँ पियानो पर बजाओल नोट्स चिन्हित करबाक आ रीयल-टाइम फीडबैक देबाक लेल SurVibe केँ माइक्रोफोन एक्सेस चाही।"
+          }
+        },
+        "ml" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "നിങ്ങളുടെ പിയാനോയിൽ വായിക്കുന്ന സ്വരങ്ങൾ തിരിച്ചറിയാനും തത്സമയ ഫീഡ്‌ബാക്ക് നൽകാനും SurVibe ന് മൈക്രോഫോൺ ആക്‌സസ് ആവശ്യമാണ്."
+          }
+        },
+        "or" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ଆପଣ ପିଆନୋରେ ବଜାଉଥିବା ନୋଟ୍ ଚିହ୍ନଟ କରିବା ଏବଂ ରିଅଲ-ଟାଇମ ଫିଡବ୍ୟାକ ଦେବା ପାଇଁ SurVibe କୁ ମାଇକ୍ରୋଫୋନ ଏକ୍ସେସ ଦରକାର।"
+          }
+        },
+        "sa" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "भवता पियानो उपरि वादितान् स्वरान् ज्ञातुं तात्कालिकप्रतिपुष्टिं दातुं च SurVibe कृते सूक्ष्मध्वनिग्राहिका-अभिगमः आवश्यकः।"
+          }
+        },
+        "ta" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "உங்கள் பியானோவில் நீங்கள் இசைக்கும் சுரங்களைக் கண்டறிந்து நிகழ்நேர பின்னூட்டம் வழங்க SurVibe க்கு மைக்ரோஃபோன் அணுகல் தேவை."
+          }
+        },
+        "bn" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "আপনার পিয়ানোতে বাজানো নোটগুলি সনাক্ত করতে এবং রিয়েল-টাইম ফিডব্যাক দিতে SurVibe-এর মাইক্রোফোন অ্যাক্সেস প্রয়োজন।"
+          }
+        },
+        "gu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "તમારા પિયાનો પર વગાડેલા નોટ્સ ઓળખવા અને રીઅલ-ટાઇમ ફીડબેક આપવા માટે SurVibe ને માઇક્રોફોન ઍક્સેસ જરૂરી છે."
+          }
+        },
+        "mr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "तुम्ही पियानोवर वाजवलेले नोट्स ओळखण्यासाठी आणि रिअल-टाइम फीडबॅक देण्यासाठी SurVibe ला मायक्रोफोन ॲक्सेस आवश्यक आहे."
+          }
+        },
+        "ne" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "तपाईंले पियानोमा बजाउनुभएका नोटहरू पत्ता लगाउन र रियल-टाइम फिडब्याक दिन SurVibe लाई माइक्रोफोन पहुँच चाहिन्छ।"
+          }
+        },
+        "pa" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ਤੁਹਾਡੇ ਪਿਆਨੋ 'ਤੇ ਵਜਾਏ ਗਏ ਨੋਟਸ ਪਛਾਣਨ ਅਤੇ ਰੀਅਲ-ਟਾਈਮ ਫੀਡਬੈਕ ਦੇਣ ਲਈ SurVibe ਨੂੰ ਮਾਈਕ੍ਰੋਫ਼ੋਨ ਐਕਸੈਸ ਲੋੜੀਂਦੀ ਹੈ।"
+          }
+        },
+        "te" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "మీ పియానోలో మీరు వాయించే స్వరాలను గుర్తించడానికి మరియు రియల్-టైమ్ ఫీడ్‌బ్యాక్ అందించడానికి SurVibe కి మైక్రోఫోన్ యాక్సెస్ అవసరం."
+          }
+        },
+        "brx" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "नोंथाङाव पियानोआव बाजानाय नोट्सखौ सिनायथि खालामनो आरो रियल-टाइम फीडबेक होनो SurVibe आ माइक्रोफोन एक्सेस नांगौ।"
+          }
+        },
+        "doi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SurVibe गी तुंदे पियानो उप्पर बजाए गेदे नोट्स पछानने ते रीयल-टाइम फ़ीडबैक देने आस्तै माइक्रोफ़ोन एक्सेस चाहिदी ऐ।"
+          }
+        },
+        "ks" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SurVibe سٕتؠ تُہنٛدِ پیانو پؠٹھ بَجٲوَنہٕ نوٹس پَتاہ لَگٲوَنہٕ تہٕ ریئل ٹائم فیڈبیک دِنہٕ خٲطرٕ مائکروفون ایکسیس ضروری چھُ۔"
+          }
+        },
+        "mni" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "নহাক্কী পিয়ানোদা শারিবা নোটশিং খংদোকপা অমসুং রিয়েল-টাইম ফিডব্যাক পীবা SurVibe না মাইক্রোফোন এক্সেস মথৌ তাই।"
+          }
+        },
+        "sat" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ᱟᱢᱟᱜ ᱯᱤᱭᱟᱱᱚ ᱨᱮ ᱵᱟᱡᱟᱣ ᱟᱠᱟᱫ ᱱᱳᱴ ᱠᱚ ᱪᱤᱱᱦᱟᱹ ᱞᱟᱹᱜᱤᱫ ᱟᱨ ᱨᱤᱭᱞ-ᱴᱟᱭᱢ ᱯᱷᱤᱰᱵᱮᱠ ᱮᱢ ᱞᱟᱹᱜᱤᱫ SurVibe ᱮᱢᱟᱜ ᱢᱟᱭᱠᱨᱳᱯᱷᱳᱱ ᱮᱠᱥᱮᱥ ᱫᱚᱨᱠᱟᱨ᱾"
+          }
+        },
+        "sd" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "توهان جي پيانو تي وڄائيندڙ نوٽس سڃاڻڻ ۽ ريئل ٽائيم فيڊبيڪ ڏيڻ لاءِ SurVibe کي مائڪروفون رسائي گهرجي."
+          }
+        },
+        "ur" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "آپ کے پیانو پر بجائے گئے نوٹس کی شناخت اور ریئل ٹائم فیڈبیک فراہم کرنے کے لیے SurVibe کو مائیکروفون تک رسائی درکار ہے۔"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

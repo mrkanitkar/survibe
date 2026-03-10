@@ -4,6 +4,7 @@ import PackageDescription
 
 let package = Package(
     name: "SVAdvanced",
+    defaultLocalization: "en",
     platforms: [.iOS(.v26)],
     products: [
         .library(name: "SVAdvanced", targets: ["SVAdvanced"]),

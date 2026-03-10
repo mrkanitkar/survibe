@@ -1,0 +1,39 @@
+{
+  "configurations" : [
+    {
+      "id" : "5345B884-C1AF-47A9-A918-AFF75989D0A7",
+      "name" : "Configuration 1",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "codeCoverage" : false,
+    "testTimeoutsEnabled" : true
+  },
+  "testTargets" : [
+    {
+      "target" : {
+        "containerPath" : "container:SurVibe.xcodeproj",
+        "identifier" : "A961E7222F5F808100B3333D",
+        "name" : "SurVibeTests"
+      }
+    },
+    {
+      "target" : {
+        "containerPath" : "container:SurVibe.xcodeproj",
+        "identifier" : "A961E72C2F5F808100B3333D",
+        "name" : "SurVibeUITests"
+      }
+    },
+    {
+      "target" : {
+        "containerPath" : "container:Packages\/SVAudio",
+        "identifier" : "SVAudioTests",
+        "name" : "SVAudioTests"
+      }
+    }
+  ],
+  "version" : 1
+}

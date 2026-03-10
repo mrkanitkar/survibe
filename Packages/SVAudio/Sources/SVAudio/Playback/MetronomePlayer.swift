@@ -4,6 +4,8 @@ import AVFoundation
 /// Uses sample-accurate AVAudioTime scheduling for precise timing.
 @MainActor
 public final class MetronomePlayer {
+    // MARK: - Properties
+
     public static let shared = MetronomePlayer()
 
     /// Reference to the engine's metronome player node.
@@ -26,7 +28,11 @@ public final class MetronomePlayer {
     /// Queue for metronome timing.
     private let metronomeQueue = DispatchQueue(label: "com.survibe.metronome", qos: .userInteractive)
 
+    // MARK: - Initialization
+
     private init() {}
+
+    // MARK: - Public Methods
 
     /// Load a click sound for the metronome. Pre-loads into buffer.
     /// - Parameter url: URL to the click audio file (.wav, .aif)
@@ -94,6 +100,8 @@ public final class MetronomePlayer {
     public func setVolume(_ volume: Float) {
         AudioEngineManager.shared.setMetronomeVolume(volume)
     }
+
+    // MARK: - Private Methods
 
     /// Schedule a single click sound from the pre-loaded buffer.
     private func scheduleClick() {

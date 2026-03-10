@@ -1,0 +1,66 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "Browse and learn songs coming in Sprint 2" : {
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "गीत ब्राउज़ करें और सीखें, Sprint 2 में आ रहा है"
+          }
+        }
+      }
+    },
+    "Coming in Sprint 1" : {
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sprint 1 में आ रहा है"
+          }
+        }
+      }
+    },
+    "Lesson Content" : {
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "पाठ सामग्री"
+          }
+        }
+      }
+    },
+    "Practice Mode" : {
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "अभ्यास मोड"
+          }
+        }
+      }
+    },
+    "Real-time pitch feedback coming in Sprint 1" : {
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "रीयल-टाइम स्वर फ़ीडबैक Sprint 1 में आ रहा है"
+          }
+        }
+      }
+    },
+    "Song Library" : {
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "गीत लाइब्रेरी"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

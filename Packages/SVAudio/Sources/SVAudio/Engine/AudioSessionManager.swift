@@ -4,7 +4,7 @@ import AVFoundation
 /// Uses @MainActor isolation for thread-safe callback management.
 ///
 /// Category: .playAndRecord, Mode: .measurement
-/// Options: [.defaultToSpeaker, .allowBluetooth, .mixWithOthers]
+/// Options: [.defaultToSpeaker, .allowBluetoothHFP, .mixWithOthers]
 @MainActor
 public final class AudioSessionManager {
     public static let shared = AudioSessionManager()
@@ -22,7 +22,7 @@ public final class AudioSessionManager {
         try session.setCategory(
             .playAndRecord,
             mode: .measurement,
-            options: [.defaultToSpeaker, .allowBluetooth, .mixWithOthers]
+            options: [.defaultToSpeaker, .allowBluetoothHFP, .mixWithOthers]
         )
         // Request 44100 Hz sample rate per spec
         try session.setPreferredSampleRate(44100)
