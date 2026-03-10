@@ -87,7 +87,11 @@ public final class AudioKitPitchDetector: PitchDetectorProtocol {
 
     /// Autocorrelation-based pitch detection using Accelerate vDSP.
     /// Uses vDSP_correlate for proper normalized autocorrelation.
-    nonisolated private static func detectPitch(buffer: UnsafePointer<Float>, frameCount: Int, sampleRate: Double) -> Double {
+    nonisolated private static func detectPitch( // swiftlint:disable:this cyclomatic_complexity
+        buffer: UnsafePointer<Float>,
+        frameCount: Int,
+        sampleRate: Double
+    ) -> Double {
         let halfLength = frameCount / 2
         guard halfLength > 0 else { return 0 }
 

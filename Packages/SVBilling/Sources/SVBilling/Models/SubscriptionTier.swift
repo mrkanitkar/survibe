@@ -3,13 +3,13 @@ import Foundation
 /// Subscription tier levels for SurVibe.
 public enum SubscriptionTier: String, CaseIterable, Sendable {
     /// Free tier with limited features.
-    case free = "free"
+    case free
 
     /// Basic paid tier.
-    case basic = "basic"
+    case basic
 
     /// Premium tier with all features.
-    case premium = "premium"
+    case premium
 
     /// Display name for the tier.
     public var displayName: String {

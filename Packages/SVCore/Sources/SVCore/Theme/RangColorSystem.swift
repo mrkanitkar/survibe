@@ -73,10 +73,8 @@ public enum RangLevel: Int, CaseIterable, Sendable {
 
     /// Determine the rang level for a given XP value.
     public static func level(for xp: Int) -> RangLevel {
-        for level in allCases.reversed() {
-            if xp >= level.xpThreshold {
-                return level
-            }
+        for level in allCases.reversed() where xp >= level.xpThreshold {
+            return level
         }
         return .neel
     }

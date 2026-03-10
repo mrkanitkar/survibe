@@ -25,8 +25,14 @@ struct PitchResultTests {
     @Test("PitchResult equality")
     func testEquality() {
         let date = Date()
-        let a = PitchResult(frequency: 440.0, amplitude: 0.5, noteName: "Pa", octave: 4, centsOffset: 0, timestamp: date, confidence: 1.0)
-        let b = PitchResult(frequency: 440.0, amplitude: 0.5, noteName: "Pa", octave: 4, centsOffset: 0, timestamp: date, confidence: 1.0)
+        let a = PitchResult(
+            frequency: 440.0, amplitude: 0.5, noteName: "Pa",
+            octave: 4, centsOffset: 0, timestamp: date, confidence: 1.0
+        )
+        let b = PitchResult(
+            frequency: 440.0, amplitude: 0.5, noteName: "Pa",
+            octave: 4, centsOffset: 0, timestamp: date, confidence: 1.0
+        )
         #expect(a == b)
     }
 }

@@ -85,7 +85,12 @@ public final class YINPitchDetector: PitchDetectorProtocol {
 
     /// YIN autocorrelation pitch detection algorithm.
     /// Returns detected frequency in Hz, or 0 if no pitch detected.
-    nonisolated private static func detectPitch(buffer: UnsafePointer<Float>, frameCount: Int, sampleRate: Double, threshold: Double) -> Double {
+    nonisolated private static func detectPitch(
+        buffer: UnsafePointer<Float>,
+        frameCount: Int,
+        sampleRate: Double,
+        threshold: Double
+    ) -> Double {
         let halfLength = frameCount / 2
         guard halfLength > 0 else { return 0 }
 
@@ -116,14 +121,12 @@ public final class YINPitchDetector: PitchDetectorProtocol {
 
         // Step 3: Absolute threshold — find first dip below threshold
         let minTau = Int(sampleRate / 4000.0) // ~4000 Hz max detectable
-        for tau in minTau..<halfLength {
-            if cumulativeNorm[tau] < Float(threshold) {
-                // Step 4: Parabolic interpolation for sub-sample accuracy
-                let refinedTau = parabolicInterpolation(cumulativeNorm, tau: tau)
-                let frequency = sampleRate / Double(refinedTau)
-                if frequency > 50 && frequency < 4000 {
-                    return frequency
-                }
+        for tau in minTau..<halfLength where cumulativeNorm[tau] < Float(threshold) {
+            // Step 4: Parabolic interpolation for sub-sample accuracy
+            let refinedTau = parabolicInterpolation(cumulativeNorm, tau: tau)
+            let frequency = sampleRate / Double(refinedTau)
+            if frequency > 50 && frequency < 4000 {
+                return frequency
             }
         }
 

@@ -25,8 +25,12 @@ public final class TanpuraPlayer {
     public func loadAudio(at url: URL) throws {
         let audioFile = try AVAudioFile(forReading: url)
         let frameCount = AVAudioFrameCount(audioFile.length)
-        guard let buffer = AVAudioPCMBuffer(pcmFormat: audioFile.processingFormat, frameCapacity: frameCount) else {
-            throw NSError(domain: "TanpuraPlayer", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to create PCM buffer"])
+        let format = audioFile.processingFormat
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
+            throw NSError(
+                domain: "TanpuraPlayer", code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "Failed to create PCM buffer"]
+            )
         }
         try audioFile.read(into: buffer)
         loopBuffer = buffer

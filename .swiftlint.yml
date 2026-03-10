@@ -8,7 +8,10 @@ included:
 excluded:
   - .build
   - DerivedData
-  - Packages/*/. build
+  - "**/.build"
+  - "**/DerivedData"
+  - Packages/*/.build
+  - Packages/*/DerivedData
 
 # Rule configuration
 line_length:

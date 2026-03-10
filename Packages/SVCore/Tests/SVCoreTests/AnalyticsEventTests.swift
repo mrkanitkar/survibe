@@ -5,7 +5,11 @@ import Testing
 struct AnalyticsEventTests {
     @Test("Event raw values use snake_case format")
     func testRawValueFormat() {
-        for event in [AnalyticsEvent.appScaffoldingLoaded, .audioPocPitchDetected, .cloudKitSyncCompleted, .tabSelected, .sessionStarted, .sessionEnded] {
+        let events: [AnalyticsEvent] = [
+            .appScaffoldingLoaded, .audioPocPitchDetected, .cloudKitSyncCompleted,
+            .tabSelected, .sessionStarted, .sessionEnded
+        ]
+        for event in events {
             // Verify snake_case: only lowercase letters, digits, and underscores
             let isSnakeCase = event.rawValue.allSatisfy { $0.isLowercase || $0.isNumber || $0 == "_" }
             #expect(isSnakeCase, "Event '\(event.rawValue)' should be snake_case")
