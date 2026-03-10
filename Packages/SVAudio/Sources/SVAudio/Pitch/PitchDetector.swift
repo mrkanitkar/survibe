@@ -1,12 +1,15 @@
 import Foundation
 
 /// Protocol for pitch detection implementations.
-/// Provides an AsyncStream of PitchResult values from mic input.
-/// Full implementation in Batch 6.
-public protocol PitchDetectorProtocol: Sendable {
-    /// Start pitch detection and return an async stream of results.
-    func start() -> AsyncStream<PitchResult>
+/// Conforming types use AsyncStream to deliver pitch results.
+///
+/// Two implementations:
+/// - `AudioKitPitchDetector`: Autocorrelation-based (primary)
+/// - `YINPitchDetector`: YIN algorithm (fallback)
+public protocol PitchDetectorProtocol: AnyObject {
+    /// Start pitch detection and return an AsyncStream of results.
+    @MainActor func start() -> AsyncStream<PitchResult>
 
-    /// Stop pitch detection.
-    func stop()
+    /// Stop pitch detection and clean up resources.
+    @MainActor func stop()
 }

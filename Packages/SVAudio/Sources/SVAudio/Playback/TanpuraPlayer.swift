@@ -1,8 +1,9 @@
 import AVFoundation
 
-/// Tanpura drone player using AVAudioPlayerNode with looped playback.
+/// Tanpura drone player using AVAudioPlayerNode with looped buffer playback.
 /// Uses AudioEngineManager's tanpura node.
-public final class TanpuraPlayer: @unchecked Sendable {
+@MainActor
+public final class TanpuraPlayer {
     public static let shared = TanpuraPlayer()
 
     /// Reference to the engine's tanpura player node.
@@ -13,29 +14,30 @@ public final class TanpuraPlayer: @unchecked Sendable {
     /// Whether the tanpura is currently playing.
     public private(set) var isPlaying: Bool = false
 
-    /// Current audio file for the drone.
-    private var audioFile: AVAudioFile?
+    /// Pre-loaded audio buffer for gapless looping.
+    private var loopBuffer: AVAudioPCMBuffer?
 
     private init() {}
 
     /// Load a tanpura audio file for drone playback.
+    /// Pre-loads into an AVAudioPCMBuffer for gapless looping.
     /// - Parameter url: URL to the tanpura audio file (.wav, .aif, .m4a)
     public func loadAudio(at url: URL) throws {
-        audioFile = try AVAudioFile(forReading: url)
+        let audioFile = try AVAudioFile(forReading: url)
+        let frameCount = AVAudioFrameCount(audioFile.length)
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: audioFile.processingFormat, frameCapacity: frameCount) else {
+            throw NSError(domain: "TanpuraPlayer", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to create PCM buffer"])
+        }
+        try audioFile.read(into: buffer)
+        loopBuffer = buffer
     }
 
-    /// Start the tanpura drone with looped playback.
+    /// Start the tanpura drone with gapless looped playback.
     public func start() {
-        guard let audioFile, !isPlaying else { return }
+        guard let loopBuffer, !isPlaying else { return }
 
-        playerNode.scheduleFile(audioFile, at: nil) { [weak self] in
-            // Re-schedule for looping
-            DispatchQueue.main.async {
-                if self?.isPlaying == true {
-                    self?.start()
-                }
-            }
-        }
+        // Schedule buffer with .loops for gapless playback at engine level
+        playerNode.scheduleBuffer(loopBuffer, at: nil, options: .loops)
         playerNode.play()
         isPlaying = true
     }

@@ -2,14 +2,15 @@ import AVFoundation
 import SVCore
 
 /// Central audio engine manager using a single AVAudioEngine instance.
-/// Manages mic input, SoundFont playback, tanpura drone, and metronome nodes.
+/// Uses @MainActor isolation for thread-safe state access.
 ///
 /// Node graph (per WWDC 2014/2019 best practice — single engine):
 /// - AVAudioInputNode (mic, 2048 buffer tap at 44100 Hz)
 /// - AVAudioUnitSampler (SoundFont piano)
 /// - AVAudioPlayerNode x2 (tanpura, metronome)
 /// - Main mixer with per-node volume
-public final class AudioEngineManager: @unchecked Sendable {
+@MainActor
+public final class AudioEngineManager {
     public static let shared = AudioEngineManager()
 
     /// The single AVAudioEngine instance.
@@ -48,11 +49,15 @@ public final class AudioEngineManager: @unchecked Sendable {
 
         // Set up interruption handling
         AudioSessionManager.shared.onInterruptionBegan = { [weak self] in
-            self?.engine.pause()
+            Task { @MainActor in
+                self?.engine.pause()
+            }
         }
         AudioSessionManager.shared.onInterruptionEnded = { [weak self] shouldResume in
-            if shouldResume {
-                try? self?.engine.start()
+            Task { @MainActor in
+                if shouldResume {
+                    try? self?.engine.start()
+                }
             }
         }
 
@@ -62,7 +67,6 @@ public final class AudioEngineManager: @unchecked Sendable {
 
     /// Stop the audio engine and remove any installed taps.
     public func stop() {
-        // Remove mic tap if installed
         let inputNode = engine.inputNode
         inputNode.removeTap(onBus: 0)
 
@@ -80,10 +84,10 @@ public final class AudioEngineManager: @unchecked Sendable {
     /// Install a tap on the mic input node for pitch detection.
     /// - Parameters:
     ///   - bufferSize: Number of frames per buffer (default: 2048)
-    ///   - handler: Callback with audio buffer and time
+    ///   - handler: Callback with audio buffer and time. Executes on real-time audio thread.
     public func installMicTap(
         bufferSize: AVAudioFrameCount? = nil,
-        handler: @escaping (AVAudioPCMBuffer, AVAudioTime) -> Void
+        handler: @escaping @Sendable (AVAudioPCMBuffer, AVAudioTime) -> Void
     ) {
         let inputNode = engine.inputNode
         let recordingFormat = inputNode.outputFormat(forBus: 0)

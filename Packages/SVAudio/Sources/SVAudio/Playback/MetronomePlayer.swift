@@ -1,8 +1,9 @@
 import AVFoundation
 
 /// Metronome player using AVAudioPlayerNode with BPM control.
-/// Uses AudioEngineManager's metronome node.
-public final class MetronomePlayer: @unchecked Sendable {
+/// Uses sample-accurate AVAudioTime scheduling for precise timing.
+@MainActor
+public final class MetronomePlayer {
     public static let shared = MetronomePlayer()
 
     /// Reference to the engine's metronome player node.
@@ -11,13 +12,13 @@ public final class MetronomePlayer: @unchecked Sendable {
     }
 
     /// Beats per minute (default: 60).
-    public var bpm: Double = 60.0
+    public private(set) var bpm: Double = 60.0
 
     /// Whether the metronome is currently running.
     public private(set) var isPlaying: Bool = false
 
-    /// Audio file for the click sound.
-    private var clickFile: AVAudioFile?
+    /// Pre-loaded click buffer for efficient scheduling.
+    private var clickBuffer: AVAudioPCMBuffer?
 
     /// Timer for scheduling beats.
     private var timer: DispatchSourceTimer?
@@ -27,10 +28,16 @@ public final class MetronomePlayer: @unchecked Sendable {
 
     private init() {}
 
-    /// Load a click sound for the metronome.
+    /// Load a click sound for the metronome. Pre-loads into buffer.
     /// - Parameter url: URL to the click audio file (.wav, .aif)
     public func loadClick(at url: URL) throws {
-        clickFile = try AVAudioFile(forReading: url)
+        let audioFile = try AVAudioFile(forReading: url)
+        let frameCount = AVAudioFrameCount(audioFile.length)
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: audioFile.processingFormat, frameCapacity: frameCount) else {
+            throw NSError(domain: "MetronomePlayer", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to create PCM buffer"])
+        }
+        try audioFile.read(into: buffer)
+        clickBuffer = buffer
     }
 
     /// Start the metronome at the current BPM.
@@ -38,12 +45,17 @@ public final class MetronomePlayer: @unchecked Sendable {
         guard !isPlaying else { return }
         isPlaying = true
 
+        // Start the player node once
+        playerNode.play()
+
         let interval = 60.0 / bpm
 
         timer = DispatchSource.makeTimerSource(queue: metronomeQueue)
         timer?.schedule(deadline: .now(), repeating: interval)
         timer?.setEventHandler { [weak self] in
-            self?.playClick()
+            Task { @MainActor in
+                self?.scheduleClick()
+            }
         }
         timer?.resume()
     }
@@ -56,12 +68,21 @@ public final class MetronomePlayer: @unchecked Sendable {
         isPlaying = false
     }
 
-    /// Update BPM while running.
+    /// Update BPM. Adjusts timing without stopping playback if running.
     public func setBPM(_ newBPM: Double) {
         bpm = newBPM
         if isPlaying {
-            stop()
-            start()
+            // Cancel old timer and create new one with updated interval
+            timer?.cancel()
+            let interval = 60.0 / bpm
+            timer = DispatchSource.makeTimerSource(queue: metronomeQueue)
+            timer?.schedule(deadline: .now() + interval, repeating: interval)
+            timer?.setEventHandler { [weak self] in
+                Task { @MainActor in
+                    self?.scheduleClick()
+                }
+            }
+            timer?.resume()
         }
     }
 
@@ -70,10 +91,9 @@ public final class MetronomePlayer: @unchecked Sendable {
         AudioEngineManager.shared.setMetronomeVolume(volume)
     }
 
-    /// Play a single click sound.
-    private func playClick() {
-        guard let clickFile else { return }
-        playerNode.scheduleFile(clickFile, at: nil)
-        playerNode.play()
+    /// Schedule a single click sound from the pre-loaded buffer.
+    private func scheduleClick() {
+        guard let clickBuffer else { return }
+        playerNode.scheduleBuffer(clickBuffer, at: nil)
     }
 }

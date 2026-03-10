@@ -10,7 +10,8 @@ final class SongProgress {
     var bestScore: Double = 0.0
     var timesPlayed: Int = 0
     var lastPlayedAt: Date = Date()
-    var isCompleted: Bool = false
+    /// One-way completion flag (false -> true only). Use `markCompleted()` to set.
+    private(set) var isCompleted: Bool = false
 
     init(
         songId: String = "",
@@ -30,5 +31,11 @@ final class SongProgress {
         bestScore = max(bestScore, score)
         timesPlayed += 1
         lastPlayedAt = Date()
+    }
+
+    /// Mark the song as completed. One-way: once true, cannot revert to false.
+    func markCompleted() {
+        guard !isCompleted else { return }
+        isCompleted = true
     }
 }

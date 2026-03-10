@@ -2,7 +2,8 @@ import AVFoundation
 
 /// Manages SoundFont instrument loading and MIDI note playback
 /// via AVAudioUnitSampler connected to AudioEngineManager's engine.
-public final class SoundFontManager: @unchecked Sendable {
+@MainActor
+public final class SoundFontManager {
     public static let shared = SoundFontManager()
 
     /// Reference to the engine's sampler node.

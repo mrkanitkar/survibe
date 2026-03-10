@@ -2,25 +2,26 @@ import SwiftUI
 
 /// Accessibility helpers for VoiceOver labels and announcements.
 public enum AccessibilityHelper {
+    /// VoiceOver-friendly pronunciations for all 12 swar notes.
+    private static let voiceOverNames: [String: String] = [
+        "Sa": "Sa, the tonic note",
+        "Komal Re": "Komal Re, flat second",
+        "Re": "Re, the second note",
+        "Komal Ga": "Komal Ga, flat third",
+        "Ga": "Ga, the third note",
+        "Ma": "Ma, the fourth note",
+        "Tivra Ma": "Tivra Ma, sharp fourth",
+        "Pa": "Pa, the fifth note",
+        "Komal Dha": "Komal Dha, flat sixth",
+        "Dha": "Dha, the sixth note",
+        "Komal Ni": "Komal Ni, flat seventh",
+        "Ni": "Ni, the seventh note"
+    ]
+
     /// Generate VoiceOver label for a swar note.
     /// Provides the full note name for screen reader pronunciation.
     public static func swarLabel(for noteName: String) -> String {
-        // Map abbreviated note names to full VoiceOver-friendly pronunciations
-        let voiceOverNames: [String: String] = [
-            "Sa": "Sa, the tonic note",
-            "Komal Re": "Komal Re, flat second",
-            "Re": "Re, the second note",
-            "Komal Ga": "Komal Ga, flat third",
-            "Ga": "Ga, the third note",
-            "Ma": "Ma, the fourth note",
-            "Tivra Ma": "Tivra Ma, sharp fourth",
-            "Pa": "Pa, the fifth note",
-            "Komal Dha": "Komal Dha, flat sixth",
-            "Dha": "Dha, the sixth note",
-            "Komal Ni": "Komal Ni, flat seventh",
-            "Ni": "Ni, the seventh note"
-        ]
-        return voiceOverNames[noteName] ?? noteName
+        voiceOverNames[noteName] ?? noteName
     }
 
     /// Generate VoiceOver label for a tab.
@@ -45,7 +46,8 @@ public enum AccessibilityHelper {
         }
     }
 
-    /// Post a VoiceOver announcement.
+    /// Post a VoiceOver announcement. Must be called on the main thread.
+    @MainActor
     public static func announce(_ message: String) {
         #if canImport(UIKit)
         UIAccessibility.post(notification: .announcement, argument: message)

@@ -1,4 +1,5 @@
 import SwiftUI
+import SVCore
 
 /// Songs tab — placeholder for song library.
 struct SongsTab: View {
@@ -16,7 +17,7 @@ struct SongsTab: View {
             }
             .navigationTitle("Songs")
         }
-        .accessibilityLabel("Songs tab")
+        .accessibilityLabel(AccessibilityHelper.tabLabel(for: "Songs"))
     }
 }
 

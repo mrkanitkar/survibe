@@ -1,4 +1,5 @@
 import SwiftUI
+import SVCore
 
 /// Learn tab — placeholder for lesson content.
 struct LearnTab: View {
@@ -16,7 +17,7 @@ struct LearnTab: View {
             }
             .navigationTitle("Learn")
         }
-        .accessibilityLabel("Learn tab")
+        .accessibilityLabel(AccessibilityHelper.tabLabel(for: "Learn"))
     }
 }
 

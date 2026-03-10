@@ -41,7 +41,8 @@ struct SurVibeApp: App {
         // Store schema version for manual migration tracking
         UserDefaults.standard.set(1, forKey: "survibe_schema_version")
 
-        // Initialize analytics
+        // Initialize analytics — configure PostHog before first track call
+        AnalyticsManager.shared.configure(apiKey: "phc_PLACEHOLDER_KEY")
         AnalyticsManager.shared.track(.appScaffoldingLoaded)
     }
 

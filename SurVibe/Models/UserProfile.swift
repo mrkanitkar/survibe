@@ -30,9 +30,11 @@ final class UserProfile {
         self.lastActiveAt = Date()
     }
 
-    /// Add XP using max-wins merge strategy (only increases).
+    /// Add XP (accumulative, guards against negative amounts).
+    /// CloudKit conflict resolution uses max-wins at the sync layer.
     func addXP(_ amount: Int) {
-        totalXP = max(totalXP, totalXP + amount)
+        guard amount > 0 else { return }
+        totalXP += amount
         lastActiveAt = Date()
     }
 }

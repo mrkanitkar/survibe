@@ -1,4 +1,5 @@
 import SwiftUI
+import SVCore
 
 /// Profile tab — placeholder for user profile.
 struct ProfileTab: View {
@@ -16,7 +17,7 @@ struct ProfileTab: View {
             }
             .navigationTitle("Profile")
         }
-        .accessibilityLabel("Profile tab")
+        .accessibilityLabel(AccessibilityHelper.tabLabel(for: "Profile"))
     }
 }
 
