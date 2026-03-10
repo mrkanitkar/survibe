@@ -3,7 +3,7 @@ import Observation
 import SVCore
 
 /// View model for lesson playback and progress tracking.
-/// Uses @Observable per project convention (no ObservableObject).
+/// Uses @Observable per project convention (Observation framework only).
 /// Full implementation in Sprint 1.
 @MainActor
 @Observable

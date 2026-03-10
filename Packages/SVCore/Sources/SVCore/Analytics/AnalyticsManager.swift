@@ -8,7 +8,7 @@ public final class AnalyticsManager: @unchecked Sendable {
 
     /// Whether analytics tracking is enabled. Defaults to true.
     /// Set to false to disable all tracking (user privacy toggle).
-    private var isEnabled: Bool = true
+    public private(set) var isTrackingEnabled: Bool = true
 
     private init() {}
 
@@ -29,20 +29,20 @@ public final class AnalyticsManager: @unchecked Sendable {
     /// Track an analytics event with optional properties.
     /// No-op if tracking is disabled via privacy toggle.
     public func track(_ event: AnalyticsEvent, properties: [String: Any]? = nil) {
-        guard isEnabled else { return }
+        guard isTrackingEnabled else { return }
         PostHogSDK.shared.capture(event.rawValue, properties: properties)
     }
 
     /// Identify a user for analytics.
     /// No-op if tracking is disabled via privacy toggle.
     public func identify(userId: String) {
-        guard isEnabled else { return }
+        guard isTrackingEnabled else { return }
         PostHogSDK.shared.identify(userId)
     }
 
     /// Enable or disable all analytics tracking.
     public func setTrackingEnabled(_ enabled: Bool) {
-        isEnabled = enabled
+        isTrackingEnabled = enabled
         if !enabled {
             PostHogSDK.shared.optOut()
         } else {

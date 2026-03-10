@@ -1,39 +1,46 @@
-//
-//  SurVibeUITests.swift
-//  SurVibeUITests
-//
-//  Created by maheshwar kanitkar on 09/03/26.
-//
-
 import XCTest
 
+/// D1: App launches, TabView shows 4 tabs.
+/// D7: VoiceOver labels on all tabs.
 final class SurVibeUITests: XCTestCase {
 
     override func setUpWithError() throws {
-        // Put setup code here. This method is called before the invocation of each test method in the class.
-
-        // In UI tests it is usually best to stop immediately when a failure occurs.
         continueAfterFailure = false
-
-        // In UI tests it’s important to set the initial state - such as interface orientation - required for your tests before they run. The setUp method is a good place to do this.
-    }
-
-    override func tearDownWithError() throws {
-        // Put teardown code here. This method is called after the invocation of each test method in the class.
     }
 
     @MainActor
-    func testExample() throws {
-        // UI tests must launch the application that they test.
+    func testAppLaunchesWithFourTabs() throws {
         let app = XCUIApplication()
         app.launch()
 
-        // Use XCTAssert and related functions to verify your tests produce the correct results.
+        // D1: Verify 4 tabs are visible
+        XCTAssertTrue(app.tabBars.buttons["Learn"].exists, "Learn tab should exist")
+        XCTAssertTrue(app.tabBars.buttons["Practice"].exists, "Practice tab should exist")
+        XCTAssertTrue(app.tabBars.buttons["Songs"].exists, "Songs tab should exist")
+        XCTAssertTrue(app.tabBars.buttons["Profile"].exists, "Profile tab should exist")
+    }
+
+    @MainActor
+    func testTabNavigation() throws {
+        let app = XCUIApplication()
+        app.launch()
+
+        // Navigate through all tabs
+        app.tabBars.buttons["Practice"].tap()
+        XCTAssertTrue(app.navigationBars["Practice"].waitForExistence(timeout: 2))
+
+        app.tabBars.buttons["Songs"].tap()
+        XCTAssertTrue(app.navigationBars["Songs"].waitForExistence(timeout: 2))
+
+        app.tabBars.buttons["Profile"].tap()
+        XCTAssertTrue(app.navigationBars["Profile"].waitForExistence(timeout: 2))
+
+        app.tabBars.buttons["Learn"].tap()
+        XCTAssertTrue(app.navigationBars["Learn"].waitForExistence(timeout: 2))
     }
 
     @MainActor
     func testLaunchPerformance() throws {
-        // This measures how long it takes to launch your application.
         measure(metrics: [XCTApplicationLaunchMetric()]) {
             XCUIApplication().launch()
         }
