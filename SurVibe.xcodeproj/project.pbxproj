@@ -238,6 +238,28 @@
 			knownRegions = (
 				en,
 				Base,
+				hi,
+				bn,
+				ta,
+				te,
+				mr,
+				gu,
+				kn,
+				ml,
+				pa,
+				or,
+				ur,
+				as,
+				ne,
+				sa,
+				kok,
+				mai,
+				brx,
+				doi,
+				ks,
+				sd,
+				sat,
+				mni,
 			);
 			mainGroup = A961E7092F5F808000B3333D;
 			minimizedProjectReferenceProxies = 1;
