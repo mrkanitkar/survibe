@@ -12,8 +12,7 @@ let package = Package(
         .package(path: "../SVCore"),
         .package(url: "https://github.com/AudioKit/AudioKit", from: "5.6.0"),
         .package(url: "https://github.com/AudioKit/SoundpipeAudioKit", from: "5.6.0"),
-        .package(url: "https://github.com/AudioKit/Microtonality", branch: "main"),
-        .package(url: "https://github.com/realm/SwiftLint", from: "0.57.0"),
+        .package(url: "https://github.com/AudioKit/Microtonality", branch: "main")
     ],
     targets: [
         .target(
@@ -23,8 +22,7 @@ let package = Package(
                 .product(name: "AudioKit", package: "AudioKit"),
                 .product(name: "SoundpipeAudioKit", package: "SoundpipeAudioKit"),
                 .product(name: "Microtonality", package: "Microtonality"),
-            ],
-            plugins: [.plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLint")]
+            ]
         ),
         .testTarget(
             name: "SVAudioTests",

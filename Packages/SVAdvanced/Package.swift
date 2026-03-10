@@ -11,8 +11,7 @@ let package = Package(
     dependencies: [
         .package(path: "../SVCore"),
         .package(path: "../SVAudio"),
-        .package(path: "../SVAI"),
-        .package(url: "https://github.com/realm/SwiftLint", from: "0.57.0"),
+        .package(path: "../SVAI")
     ],
     targets: [
         .target(
@@ -21,8 +20,7 @@ let package = Package(
                 .product(name: "SVCore", package: "SVCore"),
                 .product(name: "SVAudio", package: "SVAudio"),
                 .product(name: "SVAI", package: "SVAI"),
-            ],
-            plugins: [.plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLint")]
+            ]
         ),
         .testTarget(
             name: "SVAdvancedTests",

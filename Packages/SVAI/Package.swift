@@ -9,16 +9,14 @@ let package = Package(
         .library(name: "SVAI", targets: ["SVAI"]),
     ],
     dependencies: [
-        .package(path: "../SVCore"),
-        .package(url: "https://github.com/realm/SwiftLint", from: "0.57.0"),
+        .package(path: "../SVCore")
     ],
     targets: [
         .target(
             name: "SVAI",
             dependencies: [
                 .product(name: "SVCore", package: "SVCore"),
-            ],
-            plugins: [.plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLint")]
+            ]
         ),
         .testTarget(
             name: "SVAITests",
