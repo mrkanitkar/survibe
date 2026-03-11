@@ -34,6 +34,12 @@ public final class AudioEngineManager {
     private var isConfigured = false
     private var hasMicTap = false
 
+    /// Stored mic tap handler for reinstallation after route changes.
+    private var micTapHandler: (@Sendable (AVAudioPCMBuffer, AVAudioTime) -> Void)?
+
+    /// Stored mic tap buffer size for reinstallation after route changes.
+    private var micTapBufferSize: AVAudioFrameCount?
+
     private static let logger = Logger(
         subsystem: "com.survibe",
         category: "AudioEngine"
@@ -60,6 +66,72 @@ public final class AudioEngineManager {
         engine.connect(tanpuraNode, to: mainMixer, format: format)
         engine.connect(metronomeNode, to: mainMixer, format: format)
         isConfigured = true
+    }
+
+    /// Disconnect and reconnect all nodes with the current session format.
+    ///
+    /// Called when the audio route changes (Bluetooth connect/disconnect,
+    /// headphones plugged in) so nodes use the newly negotiated format.
+    private func reconnectNodes() {
+        let mainMixer = engine.mainMixerNode
+        engine.disconnectNodeOutput(sampler)
+        engine.disconnectNodeOutput(tanpuraNode)
+        engine.disconnectNodeOutput(metronomeNode)
+
+        let format = mainMixer.outputFormat(forBus: 0)
+        engine.connect(sampler, to: mainMixer, format: format)
+        engine.connect(tanpuraNode, to: mainMixer, format: format)
+        engine.connect(metronomeNode, to: mainMixer, format: format)
+
+        Self.logger.info(
+            "Nodes reconnected with format: rate=\(format.sampleRate) ch=\(format.channelCount)"
+        )
+    }
+
+    /// Handle an audio route change by reconnecting nodes with the new format.
+    ///
+    /// Pauses the engine, reconnects nodes, restarts the engine, and
+    /// reinstalls the mic tap if one was active before the route change.
+    private func handleRouteChange() {
+        guard engine.isRunning else {
+            Self.logger.info("Route changed but engine not running — skipping")
+            return
+        }
+
+        Self.logger.info("Audio route changed — reconnecting nodes")
+
+        // Remember mic tap state before pausing
+        let hadMicTap = hasMicTap
+        let savedHandler = micTapHandler
+        let savedBufferSize = micTapBufferSize
+
+        // Remove existing mic tap before reconnecting
+        if hasMicTap {
+            engine.inputNode.removeTap(onBus: 0)
+            hasMicTap = false
+        }
+
+        engine.pause()
+        reconnectNodes()
+
+        do {
+            engine.prepare()
+            try engine.start()
+            Self.logger.info("Engine restarted after route change")
+        } catch {
+            Self.logger.error("Engine restart after route change failed: \(error.localizedDescription)")
+            return
+        }
+
+        // Reinstall mic tap if one was active
+        if hadMicTap, let handler = savedHandler {
+            let reinstalled = installMicTap(bufferSize: savedBufferSize, handler: handler)
+            if reinstalled {
+                Self.logger.info("Mic tap reinstalled after route change")
+            } else {
+                Self.logger.error("Failed to reinstall mic tap after route change")
+            }
+        }
     }
 
     // MARK: - Public Methods
@@ -102,6 +174,13 @@ public final class AudioEngineManager {
             }
         }
 
+        // Handle audio route changes (Bluetooth, headphones) by reconnecting nodes
+        AudioSessionManager.shared.onRouteChange = { [weak self] in
+            Task { @MainActor in
+                self?.handleRouteChange()
+            }
+        }
+
         engine.prepare()
         try engine.start()
         Self.logger.info("Engine started, isRunning=\(self.engine.isRunning)")
@@ -112,6 +191,8 @@ public final class AudioEngineManager {
         if hasMicTap {
             engine.inputNode.removeTap(onBus: 0)
             hasMicTap = false
+            micTapHandler = nil
+            micTapBufferSize = nil
         }
         if engine.isRunning {
             tanpuraNode.stop()
@@ -176,15 +257,22 @@ public final class AudioEngineManager {
             block: handler
         )
         hasMicTap = true
+
+        // Store for reinstallation after route changes
+        micTapHandler = handler
+        micTapBufferSize = tapBufferSize
+
         Self.logger.info("Mic tap installed successfully")
         return true
     }
 
-    /// Remove the mic input tap.
+    /// Remove the mic input tap and clear stored handler.
     public func removeMicTap() {
         guard hasMicTap else { return }
         engine.inputNode.removeTap(onBus: 0)
         hasMicTap = false
+        micTapHandler = nil
+        micTapBufferSize = nil
     }
 
     /// Set volume for the sampler node (0.0 to 1.0).

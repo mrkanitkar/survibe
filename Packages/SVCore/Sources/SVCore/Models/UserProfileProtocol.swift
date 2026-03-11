@@ -1,7 +1,7 @@
 import Foundation
 
 /// Protocol defining the shape of a user profile for cross-package use.
-public protocol UserProfileProtocol {
+public protocol UserProfileProtocol: Sendable {
     var id: UUID { get }
     var displayName: String { get }
     var currentRang: Int { get }

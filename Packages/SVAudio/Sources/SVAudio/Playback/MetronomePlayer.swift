@@ -1,7 +1,12 @@
 import AVFoundation
+import os.log
 
-/// Metronome player using AVAudioPlayerNode with BPM control.
-/// Uses sample-accurate AVAudioTime scheduling for precise timing.
+/// Metronome player using AVAudioPlayerNode with sample-accurate AVAudioTime scheduling.
+///
+/// Instead of wall-clock `DispatchSourceTimer` (which drifts 1-5ms due to OS scheduling),
+/// beats are pre-scheduled on the audio engine's sample timeline using `AVAudioTime`.
+/// A look-ahead loop runs via `Task.sleep`, scheduling 4 beats ahead to ensure the
+/// audio hardware always has upcoming beats queued.
 @MainActor
 public final class MetronomePlayer {
     // MARK: - Properties
@@ -22,11 +27,16 @@ public final class MetronomePlayer {
     /// Pre-loaded click buffer for efficient scheduling.
     private var clickBuffer: AVAudioPCMBuffer?
 
-    /// Timer for scheduling beats.
-    private var timer: DispatchSourceTimer?
+    /// Async scheduling task that pre-schedules beats ahead on the audio timeline.
+    private var schedulerTask: Task<Void, Never>?
 
-    /// Queue for metronome timing.
-    private let metronomeQueue = DispatchQueue(label: "com.survibe.metronome", qos: .userInteractive)
+    /// Number of beats to schedule ahead of the current playback position.
+    private let lookAheadBeats = 4
+
+    private static let logger = Logger(
+        subsystem: "com.survibe",
+        category: "Metronome"
+    )
 
     // MARK: - Initialization
 
@@ -42,7 +52,8 @@ public final class MetronomePlayer {
         let format = audioFile.processingFormat
         guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
             throw NSError(
-                domain: "MetronomePlayer", code: -1,
+                domain: "MetronomePlayer",
+                code: -1,
                 userInfo: [NSLocalizedDescriptionKey: "Failed to create PCM buffer"]
             )
         }
@@ -51,48 +62,60 @@ public final class MetronomePlayer {
     }
 
     /// Start the metronome at the current BPM.
+    ///
+    /// Captures the engine's current sample time as a reference point, then
+    /// launches a scheduling loop that pre-schedules beats at exact sample
+    /// positions on the audio timeline.
     public func start() {
         guard !isPlaying else { return }
-        isPlaying = true
+        guard clickBuffer != nil else {
+            Self.logger.error("start: no click buffer loaded")
+            return
+        }
 
-        // Start the player node once
+        isPlaying = true
         playerNode.play()
 
-        let interval = 60.0 / bpm
-
-        timer = DispatchSource.makeTimerSource(queue: metronomeQueue)
-        timer?.schedule(deadline: .now(), repeating: interval)
-        timer?.setEventHandler { [weak self] in
-            Task { @MainActor in
-                self?.scheduleClick()
-            }
+        let sampleRate = AudioSessionManager.shared.sampleRate
+        guard sampleRate > 0 else {
+            Self.logger.error("start: sampleRate is 0")
+            isPlaying = false
+            return
         }
-        timer?.resume()
+
+        // Get the engine's current sample time as our reference anchor
+        let startSampleTime = currentSampleTime()
+
+        Self.logger.info(
+            "Starting metronome: bpm=\(self.bpm) sampleRate=\(sampleRate) startSample=\(startSampleTime)"
+        )
+
+        startSchedulingLoop(fromSampleTime: startSampleTime, sampleRate: sampleRate)
     }
 
     /// Stop the metronome.
     public func stop() {
-        timer?.cancel()
-        timer = nil
+        schedulerTask?.cancel()
+        schedulerTask = nil
         playerNode.stop()
         isPlaying = false
     }
 
-    /// Update BPM. Adjusts timing without stopping playback if running.
+    /// Update BPM. Restarts scheduling with the new interval if running.
+    ///
+    /// Cancels the current scheduling loop and starts a new one anchored at
+    /// the engine's current sample time to avoid gaps or overlaps.
     public func setBPM(_ newBPM: Double) {
         bpm = newBPM
         if isPlaying {
-            // Cancel old timer and create new one with updated interval
-            timer?.cancel()
-            let interval = 60.0 / bpm
-            timer = DispatchSource.makeTimerSource(queue: metronomeQueue)
-            timer?.schedule(deadline: .now() + interval, repeating: interval)
-            timer?.setEventHandler { [weak self] in
-                Task { @MainActor in
-                    self?.scheduleClick()
-                }
-            }
-            timer?.resume()
+            schedulerTask?.cancel()
+            schedulerTask = nil
+
+            let sampleRate = AudioSessionManager.shared.sampleRate
+            guard sampleRate > 0 else { return }
+
+            let anchorSample = currentSampleTime()
+            startSchedulingLoop(fromSampleTime: anchorSample, sampleRate: sampleRate)
         }
     }
 
@@ -101,11 +124,81 @@ public final class MetronomePlayer {
         AudioEngineManager.shared.setMetronomeVolume(volume)
     }
 
+    // MARK: - Internal (Visible for Testing)
+
+    /// Compute the sample time for a given beat index relative to a start time.
+    ///
+    /// - Parameters:
+    ///   - beatIndex: The zero-based beat number.
+    ///   - startSampleTime: The anchor sample time (beat 0).
+    ///   - sampleRate: Audio sample rate in Hz.
+    ///   - bpm: Beats per minute.
+    /// - Returns: The exact sample time for the beat.
+    nonisolated static func sampleTimeForBeat(
+        _ beatIndex: Int,
+        startSampleTime: AVAudioFramePosition,
+        sampleRate: Double,
+        bpm: Double
+    ) -> AVAudioFramePosition {
+        let samplesPerBeat = Int64(60.0 / bpm * sampleRate)
+        return startSampleTime + Int64(beatIndex) * samplesPerBeat
+    }
+
     // MARK: - Private Methods
 
-    /// Schedule a single click sound from the pre-loaded buffer.
-    private func scheduleClick() {
+    /// Get the engine's current sample time, falling back to 0 if unavailable.
+    private func currentSampleTime() -> AVAudioFramePosition {
+        guard let lastRenderTime = playerNode.lastRenderTime,
+            lastRenderTime.isSampleTimeValid
+        else {
+            return 0
+        }
+        return lastRenderTime.sampleTime
+    }
+
+    /// Launch the async scheduling loop that pre-schedules beats on the audio timeline.
+    ///
+    /// The loop calculates exact sample positions for each beat and schedules them
+    /// using `AVAudioPlayerNode.scheduleBuffer(_:at:)`. It sleeps between scheduling
+    /// rounds — the sleep is NOT used for timing; it only controls how often we
+    /// schedule the next batch of beats.
+    private func startSchedulingLoop(
+        fromSampleTime startSampleTime: AVAudioFramePosition,
+        sampleRate: Double
+    ) {
+        schedulerTask = Task { [weak self] in
+            var nextBeatIndex = 0
+
+            while !Task.isCancelled {
+                guard let self else { return }
+
+                // Schedule the next batch of beats ahead
+                for offset in 0..<self.lookAheadBeats {
+                    let beatIndex = nextBeatIndex + offset
+                    let beatSampleTime = Self.sampleTimeForBeat(
+                        beatIndex,
+                        startSampleTime: startSampleTime,
+                        sampleRate: sampleRate,
+                        bpm: self.bpm
+                    )
+                    let beatTime = AVAudioTime(sampleTime: beatSampleTime, atRate: sampleRate)
+                    self.scheduleClick(at: beatTime)
+                }
+
+                nextBeatIndex += self.lookAheadBeats
+
+                // Sleep for roughly the duration of the scheduled batch.
+                // This is NOT timing-critical — beats are already queued on the audio timeline.
+                let sleepSeconds = 60.0 / self.bpm * Double(self.lookAheadBeats) * 0.8
+                let sleepNanoseconds = UInt64(sleepSeconds * 1_000_000_000)
+                try? await Task.sleep(nanoseconds: sleepNanoseconds)
+            }
+        }
+    }
+
+    /// Schedule a single click sound at an exact audio time.
+    private func scheduleClick(at time: AVAudioTime) {
         guard let clickBuffer else { return }
-        playerNode.scheduleBuffer(clickBuffer, at: nil)
+        playerNode.scheduleBuffer(clickBuffer, at: time)
     }
 }

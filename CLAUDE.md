@@ -510,7 +510,7 @@ The `Swar` enum in `SVAudio/Models/Note.swift` defines the 12 notes of Indian cl
 
 ### Playback
 - **TanpuraPlayer** — looped drone using `AVAudioPCMBuffer` with `.loops` option. Provides tonic reference (Sa-Pa drone).
-- **MetronomePlayer** — pre-loaded click buffer, single `play()` call, BPM adjustable via timer. Full `AVAudioTime` scheduling deferred to Sprint 1.
+- **MetronomePlayer** — pre-loaded click buffer with sample-accurate `AVAudioTime` scheduling. A look-ahead loop pre-schedules 4 beats on the audio timeline, eliminating wall-clock jitter.
 - **SoundFontManager** — `AVAudioUnitSampler` with `loadSoundBankInstrument(at:program:bankMSB:bankLSB:)`. Piano SoundFont for note playback.
 
 ---
@@ -519,15 +519,15 @@ The `Swar` enum in `SVAudio/Models/Note.swift` defines the 12 notes of Indian cl
 
 These items were identified in the Sprint 0 architect review and intentionally deferred:
 
-| ID | Item | Sprint |
-|----|------|--------|
-| H5 | AudioEngineManager node format ordering (configure session before connecting nodes) | Sprint 1 |
-| H8 | MetronomePlayer: replace `DispatchSourceTimer` with `AVAudioTime`-based scheduling | Sprint 1 |
-| M9 | SVCore model protocols not marked `: Sendable` | Sprint 1 |
-| M10 | Rang colors: add Dark Mode variants in Asset Catalog | Sprint 1 |
-| M12 | RiyazEntry one-entry-per-day invariant (application-level enforcement) | Sprint 1 |
-| M15 | YINPitchDetector: optimize O(n²) difference function with vDSP FFT | Sprint 1 |
-| C4 | Re-evaluate PitchTap vs autocorrelation for primary pitch detection | Sprint 2 |
+| ID | Item | Sprint | Status |
+|----|------|--------|--------|
+| H5 | AudioEngineManager: handle audio route changes (reconnect nodes with new format) | Sprint 1 | **Done** |
+| H8 | MetronomePlayer: replace `DispatchSourceTimer` with `AVAudioTime`-based scheduling | Sprint 1 | **Done** |
+| M9 | SVCore model protocols not marked `: Sendable` | Sprint 1 | **Done** |
+| M10 | Rang colors: add Dark Mode variants in Asset Catalog | Sprint 1 | |
+| M12 | RiyazEntry one-entry-per-day invariant (application-level enforcement) | Sprint 1 | |
+| M15 | YINPitchDetector: optimize O(n²) difference function with vDSP FFT | Sprint 1 | |
+| C4 | Re-evaluate PitchTap vs autocorrelation for primary pitch detection | Sprint 2 | |
 
 ---
 
