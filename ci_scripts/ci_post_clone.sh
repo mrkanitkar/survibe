@@ -48,25 +48,33 @@ echo ""
 echo "=== Running swift-format Check ==="
 
 # Check formatting — report violations but don't auto-fix
-if command -v swift-format &> /dev/null; then
-    echo "swift-format found, checking formatting..."
+# Uses xcrun swift-format (Xcode toolchain) with all files in a single invocation for speed.
+SWIFT_FORMAT_CMD=""
+if command -v xcrun &> /dev/null; then
+    SWIFT_FORMAT_CMD="xcrun swift-format"
+elif command -v swift-format &> /dev/null; then
+    SWIFT_FORMAT_CMD="swift-format"
+fi
+
+if [ -n "$SWIFT_FORMAT_CMD" ]; then
+    echo "swift-format found ($SWIFT_FORMAT_CMD), checking formatting..."
     SWIFT_FILES=$(find Packages/*/Sources Packages/*/Tests SurVibe -name '*.swift' -not -path '*/.build/*' 2>/dev/null)
-    FORMAT_ERRORS=0
-    while IFS= read -r file; do
-        if ! swift-format lint --configuration .swift-format "$file" > /dev/null 2>&1; then
-            echo "Format violation: $file"
-            FORMAT_ERRORS=$((FORMAT_ERRORS + 1))
+    if [ -n "$SWIFT_FILES" ]; then
+        # Pass all files in a single invocation instead of looping — much faster
+        # shellcheck disable=SC2086
+        FORMAT_OUTPUT=$($SWIFT_FORMAT_CMD lint --configuration .swift-format $SWIFT_FILES 2>&1) || true
+        if [ -n "$FORMAT_OUTPUT" ]; then
+            FORMAT_ERRORS=$(echo "$FORMAT_OUTPUT" | wc -l | tr -d ' ')
+            echo "swift-format: $FORMAT_ERRORS formatting violations found"
+            echo "$FORMAT_OUTPUT"
+            echo "Run 'xcrun swift-format format --in-place --configuration .swift-format <file>' to fix"
+            # TODO(Sprint 1): Make swift-format violations blocking (exit 1)
+        else
+            echo "swift-format: PASSED (all files formatted correctly)"
         fi
-    done <<< "$SWIFT_FILES"
-    if [ "$FORMAT_ERRORS" -gt 0 ]; then
-        echo "swift-format: $FORMAT_ERRORS files have formatting violations"
-        echo "Run 'swift-format format --in-place --configuration .swift-format <file>' to fix"
-        # Non-blocking for now — will become blocking in Sprint 1
-    else
-        echo "swift-format: PASSED (all files formatted correctly)"
     fi
 else
-    echo "swift-format not found. Using Xcode toolchain: xcrun swift-format"
+    echo "swift-format not found in PATH or Xcode toolchain."
 fi
 
 echo ""

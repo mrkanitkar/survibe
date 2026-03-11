@@ -1,10 +1,19 @@
 import Foundation
 import SwiftUI
 
-/// Accessibility helpers for VoiceOver labels and announcements.
+/// VoiceOver label generators and accessibility announcements for SurVibe.
+///
+/// Provides consistent, localized screen reader text for swar notes,
+/// navigation tabs, rang levels, and pitch accuracy feedback.
+/// All labels follow Apple HIG for voice-friendly descriptions.
 public enum AccessibilityHelper {
-    /// Generate VoiceOver label for a swar note.
-    /// Provides the full note name for screen reader pronunciation.
+    /// Generate a VoiceOver label for a swar note.
+    ///
+    /// Returns a localized string with the full note name and its interval
+    /// description (e.g., "Sa, the tonic note") for clear screen reader pronunciation.
+    ///
+    /// - Parameter noteName: The swar name (e.g., "Sa", "Komal Re").
+    /// - Returns: Localized VoiceOver-friendly description of the note.
     public static func swarLabel(for noteName: String) -> String {
         switch noteName {
         case "Sa": String(localized: "Sa, the tonic note", bundle: .module)
@@ -23,17 +32,26 @@ public enum AccessibilityHelper {
         }
     }
 
-    /// Generate VoiceOver label for a tab.
+    /// Generate a VoiceOver label for a navigation tab.
+    ///
+    /// - Parameter tabName: Display name of the tab (e.g., "Practice", "Learn").
+    /// - Returns: Label with " tab" suffix for VoiceOver context.
     public static func tabLabel(for tabName: String) -> String {
         "\(tabName) tab"
     }
 
-    /// Generate VoiceOver label for a rang level.
+    /// Generate a VoiceOver label for a rang (gamification level).
+    ///
+    /// - Parameter level: The user's current rang level.
+    /// - Returns: Label combining the level display name and proficiency (e.g., "Neel level, Beginner").
     public static func rangLabel(for level: RangLevel) -> String {
         "\(level.displayName) level, \(level.proficiencyLabel)"
     }
 
-    /// Generate VoiceOver label for pitch accuracy.
+    /// Generate a VoiceOver label describing pitch accuracy relative to the target note.
+    ///
+    /// - Parameter centsOffset: Deviation in cents from the target pitch. Positive = sharp, negative = flat.
+    /// - Returns: Localized label: "In tune" (±5 cents), "Sharp by N cents", or "Flat by N cents".
     public static func pitchAccuracyLabel(centsOffset: Double) -> String {
         let absOffset = abs(centsOffset)
         if absOffset < 5 {
@@ -45,7 +63,9 @@ public enum AccessibilityHelper {
         }
     }
 
-    /// Post a VoiceOver announcement. Must be called on the main thread.
+    /// Post a VoiceOver announcement to the accessibility system.
+    ///
+    /// - Parameter message: The text to announce. Should be concise and action-oriented.
     @MainActor
     public static func announce(_ message: String) {
         #if canImport(UIKit)

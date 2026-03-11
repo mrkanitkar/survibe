@@ -4,6 +4,7 @@ import Foundation
 import Observation
 import SVAudio
 import SVCore
+import Synchronization
 import os.log
 
 /// Module-level logger — not actor-isolated, safe from any context.
@@ -29,12 +30,23 @@ private struct DSPResult: Sendable {
 /// Weak, Sendable reference to the ViewModel for use in Task closures.
 /// The mic tap closure does NOT capture this — only the inner Task does.
 ///
-/// @unchecked Sendable rationale: Only holds a weak reference read inside
-/// `Task { @MainActor }`, so the actual ViewModel access is always on MainActor.
-/// No mutable shared state — the weak reference itself is set once at init.
-private final class WeakVM: @unchecked Sendable {
-    weak var vm: PitchDetectionViewModel?
-    init(_ vm: PitchDetectionViewModel) { self.vm = vm }
+/// Uses Mutex from Swift Synchronization module for compiler-verified Sendable.
+/// The weak reference is set once at init and read inside `Task { @MainActor }`.
+private final class WeakVM: Sendable {
+    private let storage: Mutex<WeakRef>
+
+    /// Wrapper to make the weak reference storable inside Mutex.
+    private struct WeakRef: Sendable {
+        weak var vm: PitchDetectionViewModel?
+    }
+
+    var vm: PitchDetectionViewModel? {
+        storage.withLock { $0.vm }
+    }
+
+    init(_ vm: PitchDetectionViewModel) {
+        self.storage = Mutex(WeakRef(vm: vm))
+    }
 }
 
 // MARK: - Detection Mode
@@ -409,7 +421,11 @@ final class PitchDetectionViewModel {
             detectionCount += 1
             currentResult = pitchResult
             westernNoteName = r.westernName
-            debugStatus = "Detected: \(r.westernName)\(r.octave) (\(Int(r.frequency))Hz)"
+            // Throttle debugStatus string formatting to every 5th detection
+            // to reduce @Observable mutations and String allocs at 44Hz
+            if detectionCount % 5 == 0 {
+                debugStatus = "Detected: \(r.westernName)\(r.octave) (\(Int(r.frequency))Hz)"
+            }
             appendNote(pitchResult)
         } else if amplitude > 0.002 && mode != .chord {
             debugStatus = "Sound (amp: \(String(format: "%.3f", amplitude))) — no pitch"
@@ -464,6 +480,11 @@ final class PitchDetectionViewModel {
     // MARK: - Private Methods
 
     /// Append a detected note to the rolling history.
+    ///
+    /// Deduplicates consecutive identical notes (same swar + octave) to reduce
+    /// unnecessary @Observable mutations at the ~44Hz detection rate.
+    /// Updates the last entry in-place when the same note is held continuously,
+    /// avoiding both the O(n) `removeFirst()` and a redundant SwiftUI diff.
     private func appendNote(_ result: PitchResult) {
         let western = SwarUtility.westernName(for: result.noteName)
         let note = DetectedNote(
@@ -474,6 +495,15 @@ final class PitchDetectionViewModel {
             frequency: result.frequency,
             timestamp: result.timestamp
         )
+
+        // Deduplicate: if the last note is the same swar + octave, update in place
+        if let last = recentNotes.last,
+           last.swarName == note.swarName && last.octave == note.octave
+        {
+            recentNotes[recentNotes.count - 1] = note
+            return
+        }
+
         recentNotes.append(note)
         if recentNotes.count > maxRecentNotes {
             recentNotes.removeFirst()
@@ -495,40 +525,30 @@ struct DetectedNote: Identifiable {
 // MARK: - Thread-Safe Primitives
 
 /// Thread-safe boolean flag for signaling stop across threads.
-///
-/// @unchecked Sendable rationale: All access to `_value` is NSLock-protected.
-/// @MainActor isolation is impossible here — read from audio render thread.
-private final class AtomicFlag: @unchecked Sendable {
-    private var _value: Bool = false
-    private let lock = NSLock()
+/// Uses Mutex from Swift Synchronization module for compiler-verified Sendable.
+private final class AtomicFlag: Sendable {
+    private let value = Mutex<Bool>(false)
 
     var isSet: Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return _value
+        value.withLock { $0 }
     }
 
     func set() {
-        lock.lock()
-        defer { lock.unlock() }
-        _value = true
+        value.withLock { $0 = true }
     }
 }
 
 /// Thread-safe counter for buffer diagnostics.
-///
-/// @unchecked Sendable rationale: All access to `_value` is NSLock-protected.
-/// Incremented from audio render thread, read from DSP queue.
-private final class AtomicCounter: @unchecked Sendable {
-    private var _value: Int = 0
-    private let lock = NSLock()
+/// Uses Mutex from Swift Synchronization module for compiler-verified Sendable.
+private final class AtomicCounter: Sendable {
+    private let value = Mutex<Int>(0)
 
     @discardableResult
     func increment() -> Int {
-        lock.lock()
-        defer { lock.unlock() }
-        _value += 1
-        return _value
+        value.withLock { val in
+            val += 1
+            return val
+        }
     }
 }
 

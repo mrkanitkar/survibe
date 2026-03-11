@@ -1,5 +1,6 @@
 import AVFoundation
 import Accelerate
+import Synchronization
 import os.log
 
 /// Module-level logger — not actor-isolated, safe to use from any context.
@@ -9,22 +10,20 @@ private let pitchLogger = Logger(
 )
 
 /// Thread-safe counter for buffer diagnostics.
-private final class AtomicCounter: @unchecked Sendable {
-    private var _value: Int = 0
-    private let lock = NSLock()
+/// Uses Mutex from Swift Synchronization module for compiler-verified Sendable.
+private final class AtomicCounter: Sendable {
+    private let value = Mutex<Int>(0)
 
-    var value: Int {
-        lock.lock()
-        defer { lock.unlock() }
-        return _value
+    var currentValue: Int {
+        value.withLock { $0 }
     }
 
     @discardableResult
     func increment() -> Int {
-        lock.lock()
-        defer { lock.unlock() }
-        _value += 1
-        return _value
+        value.withLock { val in
+            val += 1
+            return val
+        }
     }
 }
 
@@ -55,6 +54,18 @@ public final class AudioKitPitchDetector: PitchDetectorProtocol {
     )
 
     public init() {}
+
+    deinit {
+        // Safety net: ensure the stream is terminated if this instance
+        // is deallocated without an explicit stop() call.
+        // Note: AudioEngineManager cleanup must happen on MainActor via Task.
+        if isDetecting {
+            continuation?.finish()
+            Task { @MainActor in
+                AudioEngineManager.shared.removeMicTap()
+            }
+        }
+    }
 
     public func start() -> AsyncStream<PitchResult> {
         // Stop any previous session
@@ -172,9 +183,9 @@ public final class AudioKitPitchDetector: PitchDetectorProtocol {
             self.status = "Listening"
             pitchLogger.info("Pitch detector started, mic tap installed")
 
-            continuation.onTermination = { _ in
-                Task { @MainActor in
-                    self.stopInternal()
+            continuation.onTermination = { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    self?.stopInternal()
                 }
             }
         }
@@ -236,7 +247,8 @@ public final class AudioKitPitchDetector: PitchDetectorProtocol {
             }
         }
 
-        // Normalize by the zero-lag value
+        // Normalize by the zero-lag value (autocorrelation[0] == signal energy;
+        // zero means silence or a fully-zero buffer — no pitch to detect).
         guard autocorrelation[0] > 0 else { return 0 }
         var invNorm: Float = 1.0 / autocorrelation[0]
         var normalized = [Float](repeating: 0, count: halfLength)

@@ -26,12 +26,9 @@ struct LanguageSelectorView: View {
             String(localized: "Restart Required"),
             isPresented: $showRestartAlert
         ) {
-            Button(String(localized: "Restart Now"), role: .destructive) {
-                exit(0)
-            }
-            Button(String(localized: "Later"), role: .cancel) {}
+            Button(String(localized: "OK"), role: .cancel) {}
         } message: {
-            Text("SurVibe needs to restart to apply the new language.")
+            Text("Please close and reopen SurVibe to apply the new language.")
         }
         .onAppear {
             selectedCode = languageManager.selectedLanguageCode
@@ -56,8 +53,8 @@ struct LanguageSelectorView: View {
                     }
                 }
             }
-            .accessibilityLabel(Text("System Default"))
-            .accessibilityHint(Text(systemDefaultHint))
+            .accessibilityLabel("System Default")
+            .accessibilityHint(systemDefaultHint)
         }
     }
 
@@ -90,12 +87,8 @@ struct LanguageSelectorView: View {
                 }
             }
         }
-        .accessibilityLabel(
-            Text(verbatim: "\(language.englishName), \(language.nativeName)")
-        )
-        .accessibilityHint(
-            Text(verbatim: languageRowHint(language.englishName, isSelected: isSelected))
-        )
+        .accessibilityLabel(Text(verbatim: "\(language.englishName), \(language.nativeName)"))
+        .accessibilityHint(languageRowHint(language.englishName, isSelected: isSelected))
     }
 
     // MARK: - Private Methods

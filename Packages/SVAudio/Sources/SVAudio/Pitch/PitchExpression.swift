@@ -119,6 +119,8 @@ public enum PitchExpressionAnalyzer {
         hopIntervalSeconds: Double
     ) -> ExpressionResult {
         guard centsHistory.count >= minimumSamples else {
+            // centsStdDev: 0 with .indeterminate means insufficient data for analysis,
+            // NOT that the pitch is perfectly stable. Callers should check the type first.
             return ExpressionResult(type: .indeterminate, centsStdDev: 0)
         }
 

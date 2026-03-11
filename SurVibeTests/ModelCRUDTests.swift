@@ -182,4 +182,39 @@ struct ModelCRUDTests {
         #expect(states.first?.tier == "free")
         #expect(states.first?.isActive == false)
     }
+
+    // MARK: - M-18: ModelContainer Fallback
+
+    @Test("In-memory fallback container supports all 6 models")
+    @MainActor
+    func testInMemoryFallbackContainer() throws {
+        // Simulates the fallback path in SurVibeApp.init() when persistent storage fails.
+        let schema = Schema([
+            UserProfile.self,
+            RiyazEntry.self,
+            Achievement.self,
+            SongProgress.self,
+            LessonProgress.self,
+            SubscriptionState.self,
+        ])
+        let fallback = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [fallback])
+        let context = container.mainContext
+
+        // Verify CRUD works on fallback container for each model type
+        context.insert(UserProfile(displayName: "Fallback"))
+        context.insert(RiyazEntry(durationMinutes: 10))
+        context.insert(Achievement(achievementType: "test", title: "Test"))
+        context.insert(SongProgress(songId: "test_song", songTitle: "Test"))
+        context.insert(LessonProgress(lessonId: "test_lesson", lessonTitle: "Test"))
+        context.insert(SubscriptionState())
+        try context.save()
+
+        #expect(try context.fetchCount(FetchDescriptor<UserProfile>()) == 1)
+        #expect(try context.fetchCount(FetchDescriptor<RiyazEntry>()) == 1)
+        #expect(try context.fetchCount(FetchDescriptor<Achievement>()) == 1)
+        #expect(try context.fetchCount(FetchDescriptor<SongProgress>()) == 1)
+        #expect(try context.fetchCount(FetchDescriptor<LessonProgress>()) == 1)
+        #expect(try context.fetchCount(FetchDescriptor<SubscriptionState>()) == 1)
+    }
 }

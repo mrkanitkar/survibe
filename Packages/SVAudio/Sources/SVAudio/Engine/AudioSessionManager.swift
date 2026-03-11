@@ -17,9 +17,26 @@ public final class AudioSessionManager {
 
     private let session = AVAudioSession.sharedInstance()
 
+    /// Observer tokens for NotificationCenter — removed in `deinit` to prevent leaks.
+    /// `nonisolated(unsafe)` is required because `deinit` is nonisolated but these
+    /// properties live on a @MainActor class. This is safe because:
+    /// 1. They are set exactly once during `init()` (on MainActor) and never mutated after.
+    /// 2. `deinit` only reads them to call `removeObserver`, which is thread-safe.
+    nonisolated(unsafe) private var interruptionObserver: (any NSObjectProtocol)?
+    nonisolated(unsafe) private var routeChangeObserver: (any NSObjectProtocol)?
+
     private init() {
         setupInterruptionObserver()
         setupRouteChangeObserver()
+    }
+
+    deinit {
+        if let interruptionObserver {
+            NotificationCenter.default.removeObserver(interruptionObserver)
+        }
+        if let routeChangeObserver {
+            NotificationCenter.default.removeObserver(routeChangeObserver)
+        }
     }
 
     /// Configure audio session for simultaneous playback and recording.
@@ -59,17 +76,25 @@ public final class AudioSessionManager {
 
     // MARK: - Interruption Handling
 
-    /// Callback invoked when audio is interrupted (phone call, etc.)
+    /// Callback invoked when audio is interrupted (phone call, Siri, etc.).
+    ///
+    /// Marked `@Sendable` because it is called from a `NotificationCenter` observer
+    /// that dispatches to MainActor via `Task`. Callers must not capture non-Sendable state.
     public var onInterruptionBegan: (@Sendable () -> Void)?
 
     /// Callback invoked when audio interruption ends.
+    ///
+    /// - Parameter shouldResume: `true` if the system recommends resuming playback.
+    /// Marked `@Sendable` — see `onInterruptionBegan` for rationale.
     public var onInterruptionEnded: (@Sendable (Bool) -> Void)?
 
     /// Callback invoked when the audio route changes (e.g., Bluetooth connect/disconnect).
+    ///
+    /// Marked `@Sendable` — see `onInterruptionBegan` for rationale.
     public var onRouteChange: (@Sendable () -> Void)?
 
     private func setupInterruptionObserver() {
-        NotificationCenter.default.addObserver(
+        interruptionObserver = NotificationCenter.default.addObserver(
             forName: AVAudioSession.interruptionNotification,
             object: session,
             queue: .main
@@ -85,7 +110,7 @@ public final class AudioSessionManager {
     }
 
     private func setupRouteChangeObserver() {
-        NotificationCenter.default.addObserver(
+        routeChangeObserver = NotificationCenter.default.addObserver(
             forName: AVAudioSession.routeChangeNotification,
             object: session,
             queue: .main

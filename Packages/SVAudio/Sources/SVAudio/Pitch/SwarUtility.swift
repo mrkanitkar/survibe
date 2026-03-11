@@ -23,6 +23,13 @@ public enum SwarUtility {
         _ frequency: Double,
         referencePitch: Double = 440.0
     ) -> (String, Int, Double) { // swiftlint:disable:this large_tuple
+        // Guard against invalid inputs that would produce NaN/Infinity from log2
+        guard frequency > 0, referencePitch > 0,
+              frequency.isFinite, referencePitch.isFinite
+        else {
+            return ("", 0, 0)
+        }
+
         let midiNote = 69.0 + 12.0 * log2(frequency / referencePitch)
         let roundedMidi = Int(round(midiNote))
         let centsOffset = (midiNote - Double(roundedMidi)) * 100.0

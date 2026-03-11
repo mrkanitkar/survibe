@@ -16,6 +16,9 @@ public final class YINPitchDetector: PitchDetectorProtocol {
     /// YIN threshold (lower = stricter, typical range 0.1 to 0.2).
     public var threshold: Double = 0.15
 
+    /// Current detector status for UI feedback (consistent with AudioKitPitchDetector API).
+    public private(set) var status: String = "Idle"
+
     public init() {}
 
     public func start() -> AsyncStream<PitchResult> {
@@ -26,6 +29,7 @@ public final class YINPitchDetector: PitchDetectorProtocol {
             }
             self.continuation = continuation
             self.isDetecting = true
+            self.status = "Listening"
 
             let refPitch = self.referencePitch
             let yinThreshold = self.threshold
@@ -102,6 +106,7 @@ public final class YINPitchDetector: PitchDetectorProtocol {
 
     public func stop() {
         isDetecting = false
+        status = "Stopped"
         AudioEngineManager.shared.removeMicTap()
         continuation?.finish()
         continuation = nil

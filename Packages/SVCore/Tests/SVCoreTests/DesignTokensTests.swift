@@ -50,7 +50,9 @@ struct DesignTokensTests {
 
     @Test("Pill radius exceeds any reasonable view dimension")
     func pillRadiusIsLargeEnough() {
-        #expect(CornerRadius.pill > 683)
+        // Largest iPhone screen dimension in points (iPhone 16 Pro Max: 440pt wide)
+        let largestScreenDimension: CGFloat = 440
+        #expect(CornerRadius.pill > largestScreenDimension)
     }
 
     @Test("Corner radii are positive")

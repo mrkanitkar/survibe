@@ -23,7 +23,11 @@ public final class PermissionManager {
     /// Current microphone permission status.
     public var microphoneStatus: MicrophonePermissionStatus = .notDetermined
 
-    /// Whether the user has been shown the denied state message.
+    /// Whether the user has been shown the denied-state message.
+    ///
+    /// Set to `true` after the "microphone denied" inline message is displayed in PracticeTab,
+    /// so the message is not repeatedly shown on every view appearance. Will be wired up
+    /// in Sprint 1 when the full practice flow is implemented.
     public var hasShownDeniedMessage: Bool = false
 
     private init() {
@@ -58,6 +62,10 @@ public final class PermissionManager {
 
     /// URL to open iOS Settings for this app (when mic access is denied).
     public var settingsURL: URL? {
+        #if canImport(UIKit)
         URL(string: UIApplication.openSettingsURLString)
+        #else
+        nil
+        #endif
     }
 }

@@ -125,6 +125,7 @@ public enum ChromagramDSP {
     ) -> [Float] {
         let log2n = vDSP_Length(log2(Float(fftSize)))
         guard let fftSetup = vDSP_create_fftsetup(log2n, FFTRadix(kFFTRadix2)) else {
+            assertionFailure("vDSP_create_fftsetup failed for log2n=\(log2n) — insufficient memory or invalid size")
             return [Float](repeating: 0, count: fftSize / 2)
         }
         defer { vDSP_destroy_fftsetup(fftSetup) }
@@ -278,28 +279,38 @@ public enum ChromagramDSP {
         vDSP_maxv(magnitudes, 1, &maxMagnitude, vDSP_Length(magnitudes.count))
         guard maxMagnitude > 0 else { return [] }
 
+        // Build a set for O(1) pitch class lookup
+        let activePitchClasses = Set(pitchClasses)
+
+        // Single pass: iterate all bins once, track the strongest bin per pitch class.
+        // This is O(bins) instead of O(bins × pitchClasses).
+        var bestBins = [Int: (bin: Int, mag: Float)](minimumCapacity: 12)
+
+        for bin in 1..<magnitudes.count {
+            let frequency = Double(bin) * binResolution
+            guard frequency >= minFrequency, frequency <= maxFrequency else { continue }
+
+            let midiNote = 69.0 + 12.0 * log2(frequency / referencePitch)
+            let roundedMidi = Int(round(midiNote))
+            let binPitchClass = ((roundedMidi - 60) % 12 + 12) % 12
+
+            guard activePitchClasses.contains(binPitchClass) else { continue }
+
+            if magnitudes[bin] > (bestBins[binPitchClass]?.mag ?? 0) {
+                bestBins[binPitchClass] = (bin, magnitudes[bin])
+            }
+        }
+
+        // Convert best bins to DetectedPitch results
         var results: [DetectedPitch] = []
 
         for pitchClass in pitchClasses {
-            // Find the strongest FFT bin for this pitch class
-            var bestBin = -1
-            var bestMag: Float = 0
+            guard let best = bestBins[pitchClass],
+                  best.bin > 0, best.bin < magnitudes.count - 1
+            else { continue }
 
-            for bin in 1..<magnitudes.count {
-                let frequency = Double(bin) * binResolution
-                guard frequency >= minFrequency, frequency <= maxFrequency else { continue }
-
-                let midiNote = 69.0 + 12.0 * log2(frequency / referencePitch)
-                let roundedMidi = Int(round(midiNote))
-                let binPitchClass = ((roundedMidi - 60) % 12 + 12) % 12
-
-                if binPitchClass == pitchClass && magnitudes[bin] > bestMag {
-                    bestMag = magnitudes[bin]
-                    bestBin = bin
-                }
-            }
-
-            guard bestBin > 0, bestBin < magnitudes.count - 1 else { continue }
+            let bestBin = best.bin
+            let bestMag = best.mag
 
             // Parabolic interpolation for sub-bin accuracy
             let s0 = magnitudes[bestBin - 1]

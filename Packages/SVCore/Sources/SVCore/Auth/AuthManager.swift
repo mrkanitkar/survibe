@@ -19,7 +19,12 @@ public final class AuthManager: AuthManagerProtocol {
 
     private init() {}
 
-    /// Sign in. Sprint 1+: Implement Sign in with Apple.
+    /// Sign in using Sign in with Apple.
+    ///
+    /// - Important: **Not implemented in Sprint 0.** This is a placeholder that no-ops.
+    ///   Sprint 1 will add Sign in with Apple via `AuthenticationServices`.
+    ///   Until then, `isAuthenticated` remains `false` and all features are available
+    ///   in offline/anonymous mode.
     public func signIn() async throws {
         // Sprint 1+: Implement Sign in with Apple
         #warning("AuthManager.signIn() not implemented — Sprint 1")

@@ -56,8 +56,17 @@ struct SurVibeApp: App {
         // Store schema version for manual migration tracking
         UserDefaults.standard.set(1, forKey: "survibe_schema_version")
 
-        // Initialize analytics — configure PostHog before first track call
-        AnalyticsManager.shared.configure(apiKey: "phc_PLACEHOLDER_KEY")
+        // Initialize analytics — API key sourced from Info.plist (set via xcconfig)
+        let apiKey = Bundle.main.object(forInfoDictionaryKey: "POSTHOG_API_KEY") as? String ?? ""
+        #if DEBUG
+        if apiKey.isEmpty || apiKey.contains("PLACEHOLDER") {
+            Logger(subsystem: "com.survibe", category: "App")
+                .warning("PostHog API key not configured. Analytics disabled.")
+        }
+        #endif
+        if !apiKey.isEmpty, !apiKey.contains("PLACEHOLDER") {
+            AnalyticsManager.shared.configure(apiKey: apiKey)
+        }
         AnalyticsManager.shared.track(.appScaffoldingLoaded)
     }
 

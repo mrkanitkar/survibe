@@ -244,8 +244,11 @@ public final class AudioEngineManager {
             "installMicTap: format=\(inputFormat.sampleRate)Hz ch=\(inputFormat.channelCount) buf=\(tapBufferSize)"
         )
 
-        // Remove existing tap if any
+        // Remove existing tap if any — warn about replacement
         if hasMicTap {
+            Self.logger.warning(
+                "installMicTap: replacing existing mic tap — only one detector should be active at a time"
+            )
             inputNode.removeTap(onBus: 0)
             hasMicTap = false
         }

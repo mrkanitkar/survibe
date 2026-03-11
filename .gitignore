@@ -13,7 +13,7 @@ xcuserdata/
 
 # Swift Package Manager
 .build/
-Packages/*/. build/
+Packages/*/.build/
 
 # CI Scripts
 ci_scripts/*.log
@@ -23,3 +23,11 @@ ci_scripts/*.log
 
 # Swift Format
 .swift-format.bak
+
+# Secrets — NEVER commit credentials, keys, or certificates
+.env*
+Secrets.xcconfig
+GoogleService-Info.plist
+*.pem
+*.p8
+*.key

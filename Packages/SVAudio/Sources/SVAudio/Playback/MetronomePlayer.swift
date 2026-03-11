@@ -106,6 +106,10 @@ public final class MetronomePlayer {
     /// Cancels the current scheduling loop and starts a new one anchored at
     /// the engine's current sample time to avoid gaps or overlaps.
     public func setBPM(_ newBPM: Double) {
+        guard newBPM.isFinite, newBPM >= 1, newBPM <= 300 else {
+            Self.logger.warning("setBPM: rejected invalid value \(newBPM)")
+            return
+        }
         bpm = newBPM
         if isPlaying {
             schedulerTask?.cancel()
@@ -188,7 +192,9 @@ public final class MetronomePlayer {
                 nextBeatIndex += self.lookAheadBeats
 
                 // Sleep for roughly the duration of the scheduled batch.
-                // This is NOT timing-critical — beats are already queued on the audio timeline.
+                // This is NOT timing-critical — beats are already pre-scheduled on the
+                // audio timeline using exact AVAudioTime sample positions. The sleep only
+                // controls how often we schedule the next batch. (Reviewed: M-5 false positive)
                 let sleepSeconds = 60.0 / self.bpm * Double(self.lookAheadBeats) * 0.8
                 let sleepNanoseconds = UInt64(sleepSeconds * 1_000_000_000)
                 try? await Task.sleep(nanoseconds: sleepNanoseconds)
