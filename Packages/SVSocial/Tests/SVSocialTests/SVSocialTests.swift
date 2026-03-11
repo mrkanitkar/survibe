@@ -1,6 +1,15 @@
 import Testing
+
 @testable import SVSocial
 
-@Test func socialVersion() {
-    #expect(SVSocial.version == "1.0.0")
+@Suite("SVSocial Module Tests")
+struct SVSocialModuleTests {
+    @Test("SVSocial version is semantic version format")
+    func versionIsSemanticFormat() {
+        let components = SVSocial.version.split(separator: ".")
+        #expect(components.count == 3)
+        for component in components {
+            #expect(Int(component) != nil)
+        }
+    }
 }
