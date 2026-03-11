@@ -1,6 +1,7 @@
-import Foundation
 import AVFoundation
+import Foundation
 import Observation
+import os
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -30,6 +31,11 @@ public final class PermissionManager {
     /// in Sprint 1 when the full practice flow is implemented.
     public var hasShownDeniedMessage: Bool = false
 
+    private static let logger = Logger(
+        subsystem: "com.survibe",
+        category: "Permissions"
+    )
+
     private init() {
         updateMicrophoneStatus()
     }
@@ -46,6 +52,9 @@ public final class PermissionManager {
         @unknown default:
             microphoneStatus = .restricted
         }
+        Self.logger.debug(
+            "Microphone status updated: \(String(describing: self.microphoneStatus))"
+        )
     }
 
     /// Request microphone access. Call in context (first practice), NOT at launch.
@@ -55,8 +64,12 @@ public final class PermissionManager {
             return microphoneStatus == .authorized
         }
 
+        Self.logger.info("Requesting microphone permission...")
         let granted = await AVAudioApplication.requestRecordPermission()
         updateMicrophoneStatus()
+        Self.logger.info(
+            "Microphone permission result: \(granted ? "granted" : "denied")"
+        )
         return granted
     }
 

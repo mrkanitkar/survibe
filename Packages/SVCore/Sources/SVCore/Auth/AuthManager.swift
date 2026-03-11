@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import os
 
 /// Protocol defining authentication operations.
 /// Conforming types should be @MainActor-isolated for UI-safe state access.
@@ -17,6 +18,11 @@ public final class AuthManager: AuthManagerProtocol {
     public static let shared = AuthManager()
     public private(set) var isAuthenticated: Bool = false
 
+    private static let logger = Logger(
+        subsystem: "com.survibe",
+        category: "Auth"
+    )
+
     private init() {}
 
     /// Sign in using Sign in with Apple.
@@ -26,12 +32,13 @@ public final class AuthManager: AuthManagerProtocol {
     ///   Until then, `isAuthenticated` remains `false` and all features are available
     ///   in offline/anonymous mode.
     public func signIn() async throws {
-        // Sprint 1+: Implement Sign in with Apple
+        Self.logger.info("signIn() called — not yet implemented (Sprint 1).")
         #warning("AuthManager.signIn() not implemented — Sprint 1")
     }
 
     /// Sign out and reset authentication state.
     public func signOut() async throws {
         isAuthenticated = false
+        Self.logger.info("User signed out.")
     }
 }

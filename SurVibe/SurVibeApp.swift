@@ -68,6 +68,9 @@ struct SurVibeApp: App {
             AnalyticsManager.shared.configure(apiKey: apiKey)
         }
         AnalyticsManager.shared.track(.appScaffoldingLoaded)
+
+        // Activate MetricKit crash reporting and diagnostics
+        CrashReportingManager.shared.activate()
     }
 
     // MARK: - Body

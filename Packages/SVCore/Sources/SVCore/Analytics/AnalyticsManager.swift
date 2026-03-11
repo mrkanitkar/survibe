@@ -1,5 +1,6 @@
 import Foundation
 import PostHog
+import os
 
 /// Thin PostHog analytics wrapper with privacy-first configuration.
 /// Uses @MainActor isolation for thread-safe state access.
@@ -22,6 +23,11 @@ public final class AnalyticsManager {
     /// Whether the SDK has been configured via `configure(apiKey:host:)`.
     public private(set) var isConfigured: Bool = false
 
+    private static let logger = Logger(
+        subsystem: "com.survibe",
+        category: "Analytics"
+    )
+
     private init() {}
 
     /// Configure PostHog analytics with privacy mode. Call once at app launch.
@@ -30,7 +36,10 @@ public final class AnalyticsManager {
     ///   - apiKey: PostHog project API key (write-only key, safe in binary). Must not be empty.
     ///   - host: PostHog host URL (defaults to PostHog cloud).
     public func configure(apiKey: String, host: String = "https://app.posthog.com") {
-        guard !apiKey.isEmpty else { return }
+        guard !apiKey.isEmpty else {
+            Self.logger.warning("Analytics configure called with empty API key.")
+            return
+        }
         let config = PostHogConfig(apiKey: apiKey, host: host)
 
         // Privacy-first configuration
@@ -41,6 +50,7 @@ public final class AnalyticsManager {
 
         PostHogSDK.shared.setup(config)
         isConfigured = true
+        Self.logger.info("Analytics configured with privacy-first settings.")
     }
 
     /// Track an analytics event with optional properties.
@@ -54,6 +64,7 @@ public final class AnalyticsManager {
     public func track(_ event: AnalyticsEvent, properties: [String: Any]? = nil) {
         guard isTrackingEnabled, isConfigured else { return }
         PostHogSDK.shared.capture(event.rawValue, properties: properties)
+        Self.logger.debug("Tracked event: \(event.rawValue)")
     }
 
     /// Identify a user for analytics.
@@ -66,6 +77,9 @@ public final class AnalyticsManager {
         // PII guard: reject strings that look like emails, phone numbers, or are too long
         #if DEBUG
         if userId.contains("@") || userId.hasPrefix("+") || userId.count > 128 {
+            Self.logger.error(
+                "identify() rejected — userId appears to contain PII."
+            )
             assertionFailure(
                 "identify() userId appears to contain PII or exceeds 128 chars: \(userId.prefix(20))..."
             )
@@ -74,6 +88,7 @@ public final class AnalyticsManager {
         #endif
 
         PostHogSDK.shared.identify(userId)
+        Self.logger.info("User identified for analytics.")
     }
 
     /// Enable or disable all analytics tracking.
@@ -88,8 +103,10 @@ public final class AnalyticsManager {
         if isConfigured {
             if !enabled {
                 PostHogSDK.shared.optOut()
+                Self.logger.info("Analytics tracking disabled (user opted out).")
             } else {
                 PostHogSDK.shared.optIn()
+                Self.logger.info("Analytics tracking enabled (user opted in).")
             }
         }
     }
@@ -101,5 +118,6 @@ public final class AnalyticsManager {
     public func reset() {
         guard isConfigured else { return }
         PostHogSDK.shared.reset()
+        Self.logger.info("Analytics identity reset.")
     }
 }
