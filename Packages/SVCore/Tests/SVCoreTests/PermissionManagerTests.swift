@@ -46,4 +46,19 @@ struct PermissionManagerTests {
             break
         }
     }
+
+    @Test("requestMicrophoneAccess returns false in test environment")
+    @MainActor
+    func requestMicrophoneAccessReturnsFalse() async {
+        let manager = PermissionManager.shared
+        // In the test runner, mic permission is never granted.
+        // This exercises the full requestMicrophoneAccess() code path:
+        // - If .notDetermined: calls AVAudioApplication.requestRecordPermission()
+        //   which is denied in the test sandbox, then updates status.
+        // - If already .denied: returns false via the guard early-return.
+        let granted = await manager.requestMicrophoneAccess()
+        #expect(granted == false)
+        // After the call, status should reflect the sandbox reality
+        #expect(manager.microphoneStatus != .authorized)
+    }
 }

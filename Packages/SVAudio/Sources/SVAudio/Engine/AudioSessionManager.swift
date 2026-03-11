@@ -1,4 +1,5 @@
 import AVFoundation
+import os
 
 /// Manages AVAudioSession configuration for simultaneous input/output.
 /// Uses @MainActor isolation for thread-safe callback management.
@@ -8,6 +9,11 @@ import AVFoundation
 @MainActor
 public final class AudioSessionManager {
     public static let shared = AudioSessionManager()
+
+    private static let logger = Logger(
+        subsystem: "com.survibe",
+        category: "AudioSessionManager"
+    )
 
     private let session = AVAudioSession.sharedInstance()
 
@@ -32,8 +38,13 @@ public final class AudioSessionManager {
     }
 
     /// Deactivate the audio session.
+    /// Logs a warning on failure rather than silently swallowing the error.
     public func deactivate() {
-        try? session.setActive(false, options: .notifyOthersOnDeactivation)
+        do {
+            try session.setActive(false, options: .notifyOthersOnDeactivation)
+        } catch {
+            Self.logger.warning("Audio session deactivation failed: \(error.localizedDescription)")
+        }
     }
 
     /// Whether other audio is currently playing.

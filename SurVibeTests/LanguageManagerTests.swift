@@ -1,4 +1,5 @@
 import Foundation
+import SVCore
 import SwiftUI
 import Testing
 
@@ -120,6 +121,26 @@ struct LanguageManagerTests {
 
         manager.setLanguage("hi")
         #expect(manager.currentLanguageDisplayName == "हिन्दी")
+
+        // Clean up
+        manager.setLanguage(nil)
+    }
+
+    // MARK: - Analytics Integration
+
+    @Test func languageChangedEventNameMatchesSpec() {
+        // Verify the analytics event raw value matches the PostHog spec
+        #expect(AnalyticsEvent.languageChanged.rawValue == "language_changed")
+    }
+
+    @MainActor
+    @Test func setLanguageFiresAnalyticsWithoutCrash() {
+        // AnalyticsManager.isConfigured is false in tests, so the PostHog
+        // call is a no-op — but this verifies the full code path executes,
+        // including the AnalyticsManager.track(.languageChanged, properties:) call.
+        let manager = LanguageManager()
+        manager.setLanguage("gu")
+        #expect(manager.pendingRestart == true)
 
         // Clean up
         manager.setLanguage(nil)
