@@ -41,10 +41,10 @@ The Sprint 0 scaffold establishes a solid foundation with correct high-level arc
 | H2 | SVCore | `AnalyticsManager.swift` | `track()` uses `[String: Any]?` not `Sendable`. | **MITIGATED** — `@MainActor` isolation means all access on main thread. Cross-actor sends don't apply. |
 | H3 | SVCore | `AuthManager.swift` | Does NOT use `@Observable`. | **FIXED** — Added `@Observable` macro |
 | H4 | SVCore | `AccessibilityHelper.swift` | `announce()` calls `UIAccessibility.post()` without `@MainActor`. | **FIXED** — Added `@MainActor` annotation |
-| H5 | SVAudio | `AudioEngineManager.swift` | Node connections use format before session configured. | **DEFERRED** — Sprint 1 will re-order init to configure session first |
+| H5 | SVAudio | `AudioEngineManager.swift` | Node connections use format before session configured. | **FIXED** — Route change handler reconnects nodes with new format, reinstalls mic tap (`a485148`) |
 | H6 | SVAudio | `AudioSessionManager.swift` | Callback closures are mutable public vars with no sync. | **FIXED** — `@MainActor` isolation ensures single-threaded access |
 | H7 | SVAudio | `TanpuraPlayer.swift` | Recursive `scheduleFile` loop causes gaps. | **FIXED** — Uses `AVAudioPCMBuffer` with `.loops` option |
-| H8 | SVAudio | `MetronomePlayer.swift` | `DispatchSourceTimer` jitter. | **IMPROVED** — Pre-loads click buffer, `play()` called once. Full AVAudioTime scheduling deferred to Sprint 1. |
+| H8 | SVAudio | `MetronomePlayer.swift` | `DispatchSourceTimer` jitter. | **FIXED** — Replaced with AVAudioTime sample-accurate scheduling using look-ahead loop (`a485148`) |
 | H9 | SVAudio | `MetronomePlayer.swift` | `playerNode.play()` on every tick. | **FIXED** — `play()` called once at start, `setBPM` adjusts timer without stop/start |
 | H10 | App | `UserProfile.swift` | `addXP` was misleading no-op. | **FIXED** — Simple `guard amount > 0; totalXP += amount` |
 | H11 | SVAI | `Protocols/` | VoiceProvider protocol missing. | **FIXED** — Created `VoiceProvider.swift` with `Sendable` protocol |
@@ -64,7 +64,7 @@ The Sprint 0 scaffold establishes a solid foundation with correct high-level arc
 | M6 | SVAudio | Multiple | `@unchecked Sendable` on TanpuraPlayer, MetronomePlayer, SoundFontManager. | **FIXED** — All converted to `@MainActor` |
 | M7 | App | `LearnTab/SongsTab/ProfileTab` | Hardcoded accessibility labels. | **FIXED** — All use `AccessibilityHelper.tabLabel(for:)` |
 | M8 | SVCore | `AccessibilityHelper.swift` | Dictionary re-allocated on every call. | **FIXED** — Changed to `private static let` |
-| M9 | SVCore | Model protocols | Not marked `: Sendable`. | **DEFERRED** — Sprint 1 |
+| M9 | SVCore | Model protocols | Not marked `: Sendable`. | **FIXED** — All 6 protocols now conform to `Sendable` (`a485148`) |
 | M10 | SVCore | `Color+Rang.swift` | No Dark Mode support. | **DEFERRED** — Sprint 1 |
 | M11 | SVCore | `AnalyticsManager.swift` | No guard against calling before `setup()`. | **FIXED** — Added `isConfigured` guard |
 | M12 | App | `RiyazEntry.swift` | No schema-level one-entry-per-day invariant. | **DEFERRED** — Application-level enforcement in Sprint 1 |
@@ -134,11 +134,13 @@ The Sprint 0 scaffold establishes a solid foundation with correct high-level arc
 ### Deferred (Sprint 1)
 - Dark Mode Rang colors (M10)
 - O(n^2) YIN optimization with vDSP FFT (M15)
-- Model protocols Sendable conformance (M9)
 - RiyazEntry one-per-day enforcement (M12)
-- Node connection format ordering (H5)
-- AVAudioTime-based metronome scheduling (H8 full)
 - Strengthen weak tests
+
+### Completed Post-Sprint 0 (commit `a485148`)
+- ~~Model protocols Sendable conformance (M9)~~
+- ~~Node connection format ordering / route change handling (H5)~~
+- ~~AVAudioTime-based metronome scheduling (H8 full)~~
 
 ---
 

@@ -33,6 +33,26 @@ public final class YINPitchDetector: PitchDetectorProtocol {
             AudioEngineManager.shared.installMicTap { buffer, _ in
                 guard let channelData = buffer.floatChannelData?[0] else { return }
                 let frameLength = Int(buffer.frameLength)
+                guard frameLength > 0 else { return }
+
+                // Calculate amplitude first so UI always gets live level feedback
+                var rms: Float = 0
+                vDSP_rmsqv(channelData, 1, &rms, vDSP_Length(frameLength))
+                let amplitude = Double(rms)
+
+                // Below noise floor — yield silence result for live meter
+                guard amplitude > 0.002 else {
+                    let silentResult = PitchResult(
+                        frequency: 0,
+                        amplitude: amplitude,
+                        noteName: "",
+                        octave: 0,
+                        centsOffset: 0,
+                        confidence: 0
+                    )
+                    continuation.yield(silentResult)
+                    return
+                }
 
                 let frequency = YINPitchDetector.detectPitch(
                     buffer: channelData,
@@ -41,27 +61,33 @@ public final class YINPitchDetector: PitchDetectorProtocol {
                     threshold: yinThreshold
                 )
 
-                guard frequency > 0 else { return }
+                if frequency > 0 {
+                    let (noteName, octave, cents) = SwarUtility.frequencyToNote(
+                        frequency, referencePitch: refPitch
+                    )
+                    let confidence = min(1.0, amplitude * 2.0)
 
-                // Calculate amplitude (RMS)
-                var rms: Float = 0
-                vDSP_rmsqv(channelData, 1, &rms, vDSP_Length(frameLength))
-                let amplitude = Double(rms)
-
-                guard amplitude > 0.01 else { return }
-
-                let (noteName, octave, cents) = SwarUtility.frequencyToNote(frequency, referencePitch: refPitch)
-                let confidence = min(1.0, amplitude * 2.0)
-
-                let result = PitchResult(
-                    frequency: frequency,
-                    amplitude: amplitude,
-                    noteName: noteName,
-                    octave: octave,
-                    centsOffset: cents,
-                    confidence: confidence
-                )
-                continuation.yield(result)
+                    let result = PitchResult(
+                        frequency: frequency,
+                        amplitude: amplitude,
+                        noteName: noteName,
+                        octave: octave,
+                        centsOffset: cents,
+                        confidence: confidence
+                    )
+                    continuation.yield(result)
+                } else {
+                    // No pitch detected but mic is active — yield amplitude-only
+                    let noFreqResult = PitchResult(
+                        frequency: 0,
+                        amplitude: amplitude,
+                        noteName: "",
+                        octave: 0,
+                        centsOffset: 0,
+                        confidence: 0
+                    )
+                    continuation.yield(noFreqResult)
+                }
             }
 
             continuation.onTermination = { _ in

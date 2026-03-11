@@ -515,19 +515,9 @@ The `Swar` enum in `SVAudio/Models/Note.swift` defines the 12 notes of Indian cl
 
 ---
 
-## KNOWN DEFERRED ITEMS (Sprint 1+)
+## DEFERRED ITEMS
 
-These items were identified in the Sprint 0 architect review and intentionally deferred:
-
-| ID | Item | Sprint | Status |
-|----|------|--------|--------|
-| H5 | AudioEngineManager: handle audio route changes (reconnect nodes with new format) | Sprint 1 | **Done** |
-| H8 | MetronomePlayer: replace `DispatchSourceTimer` with `AVAudioTime`-based scheduling | Sprint 1 | **Done** |
-| M9 | SVCore model protocols not marked `: Sendable` | Sprint 1 | **Done** |
-| M10 | Rang colors: add Dark Mode variants in Asset Catalog | Sprint 1 | |
-| M12 | RiyazEntry one-entry-per-day invariant (application-level enforcement) | Sprint 1 | |
-| M15 | YINPitchDetector: optimize O(n²) difference function with vDSP FFT | Sprint 1 | |
-| C4 | Re-evaluate PitchTap vs autocorrelation for primary pitch detection | Sprint 2 | |
+Deferred items from the Sprint 0 architect review are tracked in `docs/Sprint0_Gap_Report.md` (source of truth). Do NOT duplicate tracking here.
 
 ---
 

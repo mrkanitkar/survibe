@@ -16,6 +16,12 @@ public final class SoundFontManager {
     /// Whether a SoundFont is currently loaded.
     public private(set) var isLoaded: Bool = false
 
+    /// Currently active (playing) MIDI notes, keyed by (note, channel).
+    ///
+    /// Used by `stopAllNotes()` to iterate only active notes instead of
+    /// all 128 MIDI values. Encoded as `UInt16(channel) << 8 | UInt16(note)`.
+    private var activeNotes: Set<UInt16> = []
+
     // MARK: - Initialization
 
     private init() {}
@@ -50,6 +56,7 @@ public final class SoundFontManager {
     ///   - channel: MIDI channel (0-15, default: 0)
     public func playNote(midiNote: UInt8, velocity: UInt8 = 100, channel: UInt8 = 0) {
         sampler.startNote(midiNote, withVelocity: velocity, onChannel: channel)
+        activeNotes.insert(Self.noteKey(note: midiNote, channel: channel))
     }
 
     /// Stop a playing MIDI note.
@@ -58,12 +65,31 @@ public final class SoundFontManager {
     ///   - channel: MIDI channel (0-15, default: 0)
     public func stopNote(midiNote: UInt8, channel: UInt8 = 0) {
         sampler.stopNote(midiNote, onChannel: channel)
+        activeNotes.remove(Self.noteKey(note: midiNote, channel: channel))
     }
 
     /// Stop all currently playing notes.
+    ///
+    /// Iterates only notes that were started via `playNote`, not all 128 MIDI values.
     public func stopAllNotes() {
-        for note: UInt8 in 0...127 {
-            sampler.stopNote(note, onChannel: 0)
+        for key in activeNotes {
+            let (note, channel) = Self.decodeKey(key)
+            sampler.stopNote(note, onChannel: channel)
         }
+        activeNotes.removeAll()
+    }
+
+    // MARK: - Private Methods
+
+    /// Encode a MIDI note and channel into a single UInt16 key.
+    private static func noteKey(note: UInt8, channel: UInt8) -> UInt16 {
+        UInt16(channel) << 8 | UInt16(note)
+    }
+
+    /// Decode a UInt16 key back into MIDI note and channel.
+    private static func decodeKey(_ key: UInt16) -> (UInt8, UInt8) {
+        let note = UInt8(key & 0xFF)
+        let channel = UInt8(key >> 8)
+        return (note, channel)
     }
 }
