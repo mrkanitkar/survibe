@@ -98,7 +98,15 @@ final class PitchDetectionViewModel {
     var errorMessage: String?
 
     /// Detection history for the last few notes (rolling buffer).
-    var recentNotes: [DetectedNote] = []
+    ///
+    /// Pre-allocated with `reserveCapacity` to avoid reallocations.
+    /// Overflow is handled by reassigning from `suffix()` instead of
+    /// `removeFirst()` to avoid O(n) element shifts on every new note.
+    var recentNotes: [DetectedNote] = {
+        var arr = [DetectedNote]()
+        arr.reserveCapacity(14)
+        return arr
+    }()
 
     /// Debug status string for UI feedback.
     var debugStatus: String = "Not started"
@@ -382,9 +390,9 @@ final class PitchDetectionViewModel {
         guard amplitude > 0.002 else { return nil }
         let frequency = PitchDSP.detectPitch(samples: samples, sampleRate: sampleRate)
         guard frequency > 0 else { return nil }
-        let (noteName, octave, cents) = SwarUtility.frequencyToNote(
+        guard let (noteName, octave, cents) = try? SwarUtility.frequencyToNote(
             frequency, referencePitch: refPitch
-        )
+        ) else { return nil }
         return DSPResult(
             amplitude: amplitude, frequency: frequency, noteName: noteName,
             westernName: SwarUtility.westernName(for: noteName),
@@ -441,7 +449,7 @@ final class PitchDetectionViewModel {
         if let cents = centsForExpression {
             centsHistory.append(cents)
             if centsHistory.count > centsHistoryMaxSize {
-                centsHistory.removeFirst()
+                centsHistory = Array(centsHistory.suffix(centsHistoryMaxSize))
             }
             if centsHistory.count >= 10 {
                 currentExpression = PitchExpressionAnalyzer.analyze(
@@ -506,7 +514,9 @@ final class PitchDetectionViewModel {
 
         recentNotes.append(note)
         if recentNotes.count > maxRecentNotes {
-            recentNotes.removeFirst()
+            // Use suffix + reassign instead of removeFirst() to avoid
+            // O(n) element shifting on the hot ~44Hz detection path. (H-5)
+            recentNotes = Array(recentNotes.suffix(maxRecentNotes))
         }
     }
 }

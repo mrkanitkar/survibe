@@ -68,6 +68,10 @@ struct PracticeTab: View {
             }
         }
         .task {
+            // Guard gate: only auto-start if mic is not denied.
+            // Avoids re-triggering permission flow on every tab appearance
+            // when the user has already denied microphone access. (M-4)
+            guard viewModel.micStatus != .denied else { return }
             await viewModel.startListening()
         }
         .onDisappear {

@@ -8,68 +8,112 @@ struct SwarUtilityTests {
     // MARK: - frequencyToNote
 
     @Test("A4 at 440 Hz maps to Dha octave 4")
-    func a4MapsCorrectly() {
-        let (name, octave, cents) = SwarUtility.frequencyToNote(440.0)
+    func a4MapsCorrectly() throws {
+        let (name, octave, cents) = try SwarUtility.frequencyToNote(440.0)
         #expect(name == "Dha")
         #expect(octave == 4)
         #expect(abs(cents) < 1.0)
     }
 
     @Test("Middle C (261.63 Hz) maps to Sa octave 4")
-    func middleCMapsSa() {
-        let (name, octave, cents) = SwarUtility.frequencyToNote(261.626)
+    func middleCMapsSa() throws {
+        let (name, octave, cents) = try SwarUtility.frequencyToNote(261.626)
         #expect(name == "Sa")
         #expect(octave == 4)
         #expect(abs(cents) < 1.0)
     }
 
     @Test("C5 (523.25 Hz) maps to Sa octave 5")
-    func c5MapsSaOctave5() {
-        let (name, octave, _) = SwarUtility.frequencyToNote(523.25)
+    func c5MapsSaOctave5() throws {
+        let (name, octave, _) = try SwarUtility.frequencyToNote(523.25)
         #expect(name == "Sa")
         #expect(octave == 5)
     }
 
     @Test("Low C2 (65.41 Hz) maps to Sa octave 2")
-    func lowC2MapsSa() {
-        let (name, octave, _) = SwarUtility.frequencyToNote(65.41)
+    func lowC2MapsSa() throws {
+        let (name, octave, _) = try SwarUtility.frequencyToNote(65.41)
         #expect(name == "Sa")
         #expect(octave == 2)
     }
 
     @Test("Frequency sharp of A4 gives positive cents offset")
-    func sharpFrequencyGivesPositiveCents() {
+    func sharpFrequencyGivesPositiveCents() throws {
         // 445 Hz is slightly sharp of A4=440
-        let (_, _, cents) = SwarUtility.frequencyToNote(445.0)
+        let (_, _, cents) = try SwarUtility.frequencyToNote(445.0)
         #expect(cents > 0)
     }
 
     @Test("Frequency flat of A4 gives negative cents offset")
-    func flatFrequencyGivesNegativeCents() {
+    func flatFrequencyGivesNegativeCents() throws {
         // 435 Hz is slightly flat of A4=440
-        let (_, _, cents) = SwarUtility.frequencyToNote(435.0)
+        let (_, _, cents) = try SwarUtility.frequencyToNote(435.0)
         #expect(cents < 0)
     }
 
     @Test("All 12 swar names are reachable via frequency")
-    func allSwarsReachable() {
+    func allSwarsReachable() throws {
         // Generate one frequency per chromatic note in octave 4 (C4 to B4)
         let a4 = 440.0
         var noteNames: Set<String> = []
         for semitone in -9...2 {
             let freq = a4 * pow(2.0, Double(semitone) / 12.0)
-            let (name, _, _) = SwarUtility.frequencyToNote(freq)
+            let (name, _, _) = try SwarUtility.frequencyToNote(freq)
             noteNames.insert(name)
         }
         #expect(noteNames.count == 12)
     }
 
     @Test("Custom reference pitch shifts note mapping")
-    func customReferencePitch() {
+    func customReferencePitch() throws {
         // With A4=432 Hz, 432 Hz should map to Dha
-        let (name, _, cents) = SwarUtility.frequencyToNote(432.0, referencePitch: 432.0)
+        let (name, _, cents) = try SwarUtility.frequencyToNote(432.0, referencePitch: 432.0)
         #expect(name == "Dha")
         #expect(abs(cents) < 1.0)
+    }
+
+    // MARK: - Input Validation
+
+    @Test("Zero frequency throws invalidFrequency")
+    func zeroFrequencyThrows() {
+        #expect(throws: AudioValidationError.self) {
+            _ = try SwarUtility.frequencyToNote(0.0)
+        }
+    }
+
+    @Test("Negative frequency throws invalidFrequency")
+    func negativeFrequencyThrows() {
+        #expect(throws: AudioValidationError.self) {
+            _ = try SwarUtility.frequencyToNote(-100.0)
+        }
+    }
+
+    @Test("NaN frequency throws invalidFrequency")
+    func nanFrequencyThrows() {
+        #expect(throws: AudioValidationError.self) {
+            _ = try SwarUtility.frequencyToNote(Double.nan)
+        }
+    }
+
+    @Test("Infinite frequency throws invalidFrequency")
+    func infiniteFrequencyThrows() {
+        #expect(throws: AudioValidationError.self) {
+            _ = try SwarUtility.frequencyToNote(Double.infinity)
+        }
+    }
+
+    @Test("Zero reference pitch throws invalidReferencePitch")
+    func zeroRefPitchThrows() {
+        #expect(throws: AudioValidationError.self) {
+            _ = try SwarUtility.frequencyToNote(440.0, referencePitch: 0.0)
+        }
+    }
+
+    @Test("NaN reference pitch throws invalidReferencePitch")
+    func nanRefPitchThrows() {
+        #expect(throws: AudioValidationError.self) {
+            _ = try SwarUtility.frequencyToNote(440.0, referencePitch: Double.nan)
+        }
     }
 
     // MARK: - westernName

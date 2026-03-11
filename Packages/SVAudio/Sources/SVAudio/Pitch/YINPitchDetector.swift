@@ -65,10 +65,9 @@ public final class YINPitchDetector: PitchDetectorProtocol {
                     threshold: yinThreshold
                 )
 
-                if frequency > 0 {
-                    let (noteName, octave, cents) = SwarUtility.frequencyToNote(
-                        frequency, referencePitch: refPitch
-                    )
+                if frequency > 0, let (noteName, octave, cents) = try? SwarUtility.frequencyToNote(
+                    frequency, referencePitch: refPitch
+                ) {
                     let confidence = min(1.0, amplitude * 2.0)
 
                     let result = PitchResult(

@@ -13,7 +13,7 @@ let package = Package(
         .package(path: "../SVCore"),
         .package(url: "https://github.com/AudioKit/AudioKit", from: "5.6.0"),
         .package(url: "https://github.com/AudioKit/SoundpipeAudioKit", from: "5.6.0"),
-        .package(url: "https://github.com/AudioKit/Microtonality", from: "5.4.0")
+        .package(url: "https://github.com/AudioKit/Microtonality", branch: "main")
     ],
     targets: [
         .target(
