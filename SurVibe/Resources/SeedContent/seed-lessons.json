@@ -1,0 +1,98 @@
+[
+  {
+    "lessonId": "lesson-meet-swaras-v1",
+    "title": "Meet the Swaras: Sa Re Ga",
+    "lessonDescription": "Learn the first three notes of the Indian classical scale: Sa (root), Re (second), and Ga (third). Understand how these swaras form the foundation of melody.",
+    "difficulty": 1,
+    "orderIndex": 0,
+    "prerequisiteLessonIds": [],
+    "associatedSongIds": ["twinkle-hindi-v1"],
+    "steps": [
+      {
+        "stepType": "intro",
+        "content": "Welcome to SurVibe! Today you will learn Sa, Re, and Ga — the first three swaras (musical notes) in Indian classical music. These notes form the foundation of almost every melody you will encounter.",
+        "songId": null,
+        "durationSeconds": null
+      },
+      {
+        "stepType": "listen",
+        "content": "Listen carefully to how Sa (the root note) sounds. It is the anchor of all melodies — like home for a musician.",
+        "songId": null,
+        "durationSeconds": 10
+      },
+      {
+        "stepType": "read",
+        "content": "In sargam notation, the first three notes are written: Sa, Re, Ga. In Western notation, they correspond to C, D, and E in the key of C major.",
+        "songId": null,
+        "durationSeconds": null
+      },
+      {
+        "stepType": "exercise",
+        "content": "Sing along with the audio: Start on Sa, move up to Re, then to Ga. Hold each note for 4 beats. Feel the upward movement of the melody.",
+        "songId": "twinkle-hindi-v1",
+        "durationSeconds": 30
+      },
+      {
+        "stepType": "practice",
+        "content": "Now practice on your own. Sing Sa, Re, Ga three times in a row, slowly and steadily.",
+        "songId": null,
+        "durationSeconds": 45
+      },
+      {
+        "stepType": "quiz",
+        "content": "Which note comes after Re in the ascending sargam scale?",
+        "songId": null,
+        "durationSeconds": null
+      }
+    ],
+    "isFree": true
+  },
+  {
+    "lessonId": "lesson-first-melody-v1",
+    "title": "Your First Melody",
+    "lessonDescription": "Play your first complete melody using Sa, Re, Ga, Ma, Pa, and Dha. Learn how individual notes combine to create a recognizable tune.",
+    "difficulty": 1,
+    "orderIndex": 1,
+    "prerequisiteLessonIds": ["lesson-meet-swaras-v1"],
+    "associatedSongIds": ["twinkle-hindi-v1"],
+    "steps": [
+      {
+        "stepType": "intro",
+        "content": "You have learned Sa, Re, and Ga individually. Now let us combine them with Ma, Pa, and Dha to play Twinkle Twinkle Little Star — a melody everyone knows, mapped to sargam notation.",
+        "songId": null,
+        "durationSeconds": null
+      },
+      {
+        "stepType": "listen",
+        "content": "Listen to the complete melody. Pay attention to how the notes flow together: Sa Sa Pa Pa Dha Dha Pa, Ma Ma Ga Ga Re Re Sa.",
+        "songId": "twinkle-hindi-v1",
+        "durationSeconds": 45
+      },
+      {
+        "stepType": "read",
+        "content": "The sargam notation for this melody is: Sa Sa Pa Pa Dha Dha Pa | Ma Ma Ga Ga Re Re Sa. Notice how the first line goes up and the second line comes back down.",
+        "songId": null,
+        "durationSeconds": null
+      },
+      {
+        "stepType": "exercise",
+        "content": "Sing along with the backing track. Match the pitch of each note carefully. If you miss a note, keep going — do not stop.",
+        "songId": "twinkle-hindi-v1",
+        "durationSeconds": 45
+      },
+      {
+        "stepType": "practice",
+        "content": "Practice the melody on your own without backing. Sing slowly and clearly, holding each note for the correct duration.",
+        "songId": null,
+        "durationSeconds": 60
+      },
+      {
+        "stepType": "quiz",
+        "content": "In the first line of the melody (Sa Sa Pa Pa Dha Dha Pa), which note appears the most times?",
+        "songId": null,
+        "durationSeconds": null
+      }
+    ],
+    "isFree": true
+  }
+]

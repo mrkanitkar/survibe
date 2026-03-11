@@ -111,6 +111,12 @@ struct SurVibeApp: App {
 
         // Activate MetricKit crash reporting and diagnostics
         CrashReportingManager.shared.activate()
+
+        // Load seed content on first launch (idempotent).
+        // Skip in test host — tests create their own containers and seed data.
+        if !isTestHost {
+            SeedContentLoader.loadSeedContentIfNeeded(into: modelContainer)
+        }
     }
 
     // MARK: - Store Management
