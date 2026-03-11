@@ -1,6 +1,6 @@
 import Foundation
 
-/// Sprint 0 analytics events for pipeline verification.
+/// Analytics events for SurVibe pipeline and feature tracking.
 public enum AnalyticsEvent: String, Sendable {
     // Sprint 0 verification events
     case appScaffoldingLoaded = "app_scaffolding_loaded"
@@ -14,4 +14,10 @@ public enum AnalyticsEvent: String, Sendable {
 
     // Settings events
     case languageChanged = "language_changed"
+
+    // Day 4 events
+    case doorTapped = "door_tapped"
+    case songPlaybackStarted = "song_playback_started"
+    case songPlaybackPaused = "song_playback_paused"
+    case songPlaybackCompleted = "song_playback_completed"
 }

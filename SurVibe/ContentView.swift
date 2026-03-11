@@ -1,35 +1,54 @@
 import SVCore
 import SwiftUI
 
-/// Root content view with 4-tab navigation.
-/// Tracks tab selection events via AnalyticsManager.
+/// Root content view with 5-tab navigation.
+///
+/// Each tab maintains its own NavigationStack internally.
+/// The AppRouter provides programmatic tab switching and navigation.
 struct ContentView: View {
     // MARK: - Properties
 
-    @State private var selectedTab = "Learn"
+    @State
+    private var selectedTab: AppTab = .home
+    @State
+    private var router = AppRouter()
 
     // MARK: - Body
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            Tab("Learn", systemImage: "book.fill", value: "Learn") {
+            Tab(AppTab.home.label, systemImage: AppTab.home.systemImage, value: AppTab.home) {
+                HomeTab()
+            }
+
+            Tab(AppTab.learn.label, systemImage: AppTab.learn.systemImage, value: AppTab.learn) {
                 LearnTab()
             }
 
-            Tab("Practice", systemImage: "music.note", value: "Practice") {
+            Tab(
+                AppTab.practice.label,
+                systemImage: AppTab.practice.systemImage,
+                value: AppTab.practice
+            ) {
                 PracticeTab()
             }
 
-            Tab("Songs", systemImage: "music.note.list", value: "Songs") {
+            Tab(AppTab.songs.label, systemImage: AppTab.songs.systemImage, value: AppTab.songs) {
                 SongsTab()
             }
 
-            Tab("Profile", systemImage: "person.fill", value: "Profile") {
+            Tab(
+                AppTab.profile.label,
+                systemImage: AppTab.profile.systemImage,
+                value: AppTab.profile
+            ) {
                 ProfileTab()
             }
         }
+        .environment(router)
         .onChange(of: selectedTab) { _, newTab in
-            AnalyticsManager.shared.track(.tabSelected, properties: ["tab": newTab])
+            router.switchTab(to: newTab)
+            AnalyticsManager.shared.track(.tabSelected, properties: ["tab": newTab.label])
         }
     }
 }
