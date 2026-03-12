@@ -55,6 +55,14 @@ public struct SongImportDTO: Codable, Equatable, Sendable {
     /// Whether this song is available to free-tier users.
     public let isFree: Bool?
 
+    /// Key signature for staff notation (e.g., "C", "G", "Bb").
+    /// Defaults to C Major when absent.
+    public let keySignature: String?
+
+    /// Time signature for staff notation (e.g., "4/4", "3/4", "6/8").
+    /// Defaults to 4/4 when absent.
+    public let timeSignature: String?
+
     // MARK: - Validation
 
     /// Validates the DTO against schema rules.

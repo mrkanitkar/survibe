@@ -1,10 +1,12 @@
+import SVLearning
 import SwiftUI
 
 /// Container view that manages notation display mode, zoom, and scroll synchronization.
 ///
-/// Supports three display modes (Sargam only, Western only, both stacked)
-/// with persistence via @AppStorage. Includes pinch-to-zoom gesture
-/// (0.5x to 3.0x range) and feeds the current note index from playback.
+/// Supports five display modes (Sargam, Western labels, dual, sheet music,
+/// Sargam + sheet music) with persistence via @AppStorage. Includes
+/// pinch-to-zoom gesture (0.5x to 3.0x range) and feeds the current note
+/// index from playback.
 ///
 /// ## Usage
 /// ```swift
@@ -72,7 +74,7 @@ struct NotationContainerView: View {
         .pickerStyle(.segmented)
         .padding(.horizontal, 16)
         .accessibilityLabel("Notation display mode")
-        .accessibilityHint("Choose between Sargam, Western, or both notations")
+        .accessibilityHint("Choose between Sargam, Western, sheet music, or combined notations")
     }
 
     /// The notation renderers switched by the current display mode.
@@ -112,6 +114,36 @@ struct NotationContainerView: View {
                 WesternRenderer(
                     notes: westernNotes,
                     currentNoteIndex: currentNoteIndex,
+                    zoomScale: effectiveZoom
+                )
+            }
+
+        case .sheetMusic:
+            StaffNotationRenderer(
+                notes: westernNotes,
+                currentNoteIndex: currentNoteIndex,
+                keySignature: song.keySignatureEnum,
+                timeSignature: song.timeSignatureEnum,
+                zoomScale: effectiveZoom
+            )
+
+        case .sargamPlusSheet:
+            VStack(spacing: 16) {
+                SargamRenderer(
+                    notes: sargamNotes,
+                    currentNoteIndex: currentNoteIndex,
+                    zoomScale: effectiveZoom,
+                    labelOpacity: labelOpacity
+                )
+
+                Divider()
+                    .padding(.horizontal, 16)
+
+                StaffNotationRenderer(
+                    notes: westernNotes,
+                    currentNoteIndex: currentNoteIndex,
+                    keySignature: song.keySignatureEnum,
+                    timeSignature: song.timeSignatureEnum,
                     zoomScale: effectiveZoom
                 )
             }

@@ -143,6 +143,14 @@ final class Song {
     /// Western notation as JSON-encoded `[WesternNote]`.
     @Attribute(.externalStorage) var westernNotation: Data?
 
+    /// Key signature raw value for staff notation (e.g., "C", "G", "Bb").
+    /// Empty string defaults to C Major.
+    var keySignatureRaw: String = ""
+
+    /// Time signature raw value for staff notation (e.g., "4/4", "3/4").
+    /// Empty string defaults to 4/4.
+    var timeSignatureRaw: String = ""
+
     // MARK: - Business Logic
 
     /// Whether this song is available to free-tier users.

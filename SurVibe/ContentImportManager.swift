@@ -156,6 +156,10 @@ final class ContentImportManager {
             song.midiData = Data(base64Encoded: midiString)
         }
 
+        // Map key/time signature for staff notation
+        song.keySignatureRaw = dto.keySignature ?? ""
+        song.timeSignatureRaw = dto.timeSignature ?? ""
+
         return song
     }
 

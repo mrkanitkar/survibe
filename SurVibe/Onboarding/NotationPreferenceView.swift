@@ -113,6 +113,13 @@ struct NotationPreferenceView: View {
             case .dual:
                 sargamPreviewLine
                 westernPreviewLine
+
+            case .sheetMusic:
+                sheetMusicPreviewLine
+
+            case .sargamPlusSheet:
+                sargamPreviewLine
+                sheetMusicPreviewLine
             }
         }
         .padding(12)
@@ -138,6 +145,18 @@ struct NotationPreferenceView: View {
             .foregroundStyle(.secondary)
     }
 
+    /// Sheet music preview showing a 5-line staff icon.
+    private var sheetMusicPreviewLine: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "music.note.list")
+                .font(.body)
+                .foregroundStyle(.secondary)
+            Text(verbatim: "5-line staff notation")
+                .font(.system(.body, design: .monospaced))
+                .foregroundStyle(.secondary)
+        }
+    }
+
     // MARK: - Private Methods
 
     /// Build the accessibility label for a notation card.
@@ -152,6 +171,10 @@ struct NotationPreferenceView: View {
             return Text("Western notation. Shows standard note names: C, D, E, F, G, A, B")
         case .dual:
             return Text("Dual notation. Shows both Sargam and Western note names together")
+        case .sheetMusic:
+            return Text("Sheet music. Shows standard 5-line staff notation with treble clef")
+        case .sargamPlusSheet:
+            return Text("Sargam plus sheet music. Shows Sargam note names above a 5-line staff")
         }
     }
 }

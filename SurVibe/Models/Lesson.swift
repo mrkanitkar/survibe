@@ -79,17 +79,20 @@ final class Lesson {
 
     /// Lesson IDs that must be completed before this one.
     /// Stored as JSON array. Decode with `decodedPrerequisites`.
-    @Attribute(.externalStorage) var prerequisiteLessonIds: Data?
+    @Attribute(.externalStorage)
+    var prerequisiteLessonIds: Data?
 
     /// Song IDs referenced in this lesson.
     /// Stored as JSON array of UUID strings. Decode with `decodedSongIds`.
-    @Attribute(.externalStorage) var associatedSongIds: Data?
+    @Attribute(.externalStorage)
+    var associatedSongIds: Data?
 
     // MARK: - Learning Content
 
     /// Lesson steps as JSON-encoded `[LessonStep]`.
     /// Decode with `decodedSteps`.
-    @Attribute(.externalStorage) var stepsData: Data?
+    @Attribute(.externalStorage)
+    var stepsData: Data?
 
     // MARK: - Business Logic
 
@@ -116,6 +119,15 @@ final class Lesson {
     var decodedSongIds: [UUID]? {
         guard let data = associatedSongIds else { return nil }
         return try? JSONDecoder().decode([UUID].self, from: data)
+    }
+
+    /// Decodes associated song slug strings from the JSON blob.
+    ///
+    /// Seed content stores song references as slug strings (e.g., "twinkle-hindi-v1")
+    /// rather than UUIDs. This provides access to those slug identifiers.
+    var decodedAssociatedSongSlugs: [String]? {
+        guard let data = associatedSongIds else { return nil }
+        return try? JSONDecoder().decode([String].self, from: data)
     }
 
     /// Decodes lesson steps from the JSON blob.
