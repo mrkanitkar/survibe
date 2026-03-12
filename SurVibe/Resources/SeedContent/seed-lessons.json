@@ -40,7 +40,7 @@
       },
       {
         "stepType": "quiz",
-        "content": "Which note comes after Re in the ascending sargam scale?",
+        "content": "[{\"id\":\"L1-Q1\",\"questionText\":\"Which note comes after Re in the ascending sargam scale?\",\"options\":[\"Sa\",\"Ga\",\"Ma\",\"Pa\"],\"correctAnswerIndex\":1,\"audioClip\":null,\"questionType\":\"sargamMatching\"},{\"id\":\"L1-Q2\",\"questionText\":\"What is Sa in Western notation (key of C)?\",\"options\":[\"A\",\"B\",\"C\",\"D\"],\"correctAnswerIndex\":2,\"audioClip\":null,\"questionType\":\"noteIdentification\"},{\"id\":\"L1-Q3\",\"questionText\":\"How many swaras did you learn in this lesson?\",\"options\":[\"2\",\"3\",\"4\",\"5\"],\"correctAnswerIndex\":1,\"audioClip\":null,\"questionType\":\"sargamMatching\"}]",
         "songId": null,
         "durationSeconds": null
       }
@@ -88,11 +88,377 @@
       },
       {
         "stepType": "quiz",
-        "content": "In the first line of the melody (Sa Sa Pa Pa Dha Dha Pa), which note appears the most times?",
+        "content": "[{\"id\":\"L2-Q1\",\"questionText\":\"In the first line of the melody (Sa Sa Pa Pa Dha Dha Pa), which note appears the most times?\",\"options\":[\"Sa\",\"Pa\",\"Dha\",\"Ma\"],\"correctAnswerIndex\":1,\"audioClip\":null,\"questionType\":\"sargamMatching\"},{\"id\":\"L2-Q2\",\"questionText\":\"What is the last note of the melody?\",\"options\":[\"Pa\",\"Re\",\"Sa\",\"Ga\"],\"correctAnswerIndex\":2,\"audioClip\":null,\"questionType\":\"noteIdentification\"},{\"id\":\"L2-Q3\",\"questionText\":\"Does the second line of the melody go up or come down?\",\"options\":[\"Goes up\",\"Comes down\",\"Stays the same\",\"Goes up then down\"],\"correctAnswerIndex\":1,\"audioClip\":null,\"questionType\":\"intervalRecognition\"}]",
         "songId": null,
         "durationSeconds": null
       }
     ],
     "isFree": true
+  },
+  {
+    "lessonId": "lesson-ma-pa-intro-v1",
+    "title": "Ma and Pa: Completing the Scale",
+    "lessonDescription": "Learn Ma (the fourth swara) and Pa (the fifth swara). Together with Sa, Re, and Ga, these five notes let you play many simple melodies.",
+    "difficulty": 1,
+    "orderIndex": 2,
+    "prerequisiteLessonIds": ["lesson-first-melody-v1"],
+    "associatedSongIds": ["baa-baa-black-sheep-v1"],
+    "steps": [
+      {
+        "stepType": "intro",
+        "content": "You already know Sa, Re, and Ga. Now meet Ma and Pa — the fourth and fifth swaras. Ma is a warm, restful note, while Pa is the perfect fifth and has a strong, bright sound. Together, Sa to Pa gives you the pentatonic foundation used in melodies worldwide.",
+        "songId": null,
+        "durationSeconds": null
+      },
+      {
+        "stepType": "listen",
+        "content": "Listen to Ma and Pa played after Sa, Re, Ga. Notice how Pa has a natural consonance with Sa — they sound stable together, like two notes that belong as a pair.",
+        "songId": null,
+        "durationSeconds": 15
+      },
+      {
+        "stepType": "read",
+        "content": "In Western notation, Ma corresponds to F and Pa corresponds to G (in the key of C). Pa is special in Indian music — it is never altered (no komal or tivra variant). It is always a perfect fifth above Sa.",
+        "songId": null,
+        "durationSeconds": null
+      },
+      {
+        "stepType": "exercise",
+        "content": "Sing the ascending five-note pattern: Sa Re Ga Ma Pa. Then descend: Pa Ma Ga Re Sa. Repeat three times, keeping a steady rhythm.",
+        "songId": "baa-baa-black-sheep-v1",
+        "durationSeconds": 40
+      },
+      {
+        "stepType": "quiz",
+        "content": "[{\"id\":\"L3-Q1\",\"questionText\":\"Which swara corresponds to the fourth note of the scale?\",\"options\":[\"Ga\",\"Ma\",\"Pa\",\"Dha\"],\"correctAnswerIndex\":1,\"audioClip\":null,\"questionType\":\"sargamMatching\"},{\"id\":\"L3-Q2\",\"questionText\":\"What is Pa in Western notation (key of C)?\",\"options\":[\"F\",\"G\",\"A\",\"B\"],\"correctAnswerIndex\":1,\"audioClip\":null,\"questionType\":\"noteIdentification\"},{\"id\":\"L3-Q3\",\"questionText\":\"How many swaras are there from Sa to Pa (inclusive)?\",\"options\":[\"3\",\"4\",\"5\",\"6\"],\"correctAnswerIndex\":2,\"audioClip\":null,\"questionType\":\"intervalRecognition\"}]",
+        "songId": null,
+        "durationSeconds": null
+      }
+    ],
+    "isFree": true
+  },
+  {
+    "lessonId": "lesson-full-sargam-v1",
+    "title": "The Complete Sargam Scale",
+    "lessonDescription": "Learn Dha and Ni to complete the seven-note sargam scale. Understand the full Sa Re Ga Ma Pa Dha Ni Sa structure and practice ascending and descending patterns.",
+    "difficulty": 2,
+    "orderIndex": 3,
+    "prerequisiteLessonIds": ["lesson-ma-pa-intro-v1"],
+    "associatedSongIds": ["ode-to-joy-v1"],
+    "steps": [
+      {
+        "stepType": "intro",
+        "content": "You now know five swaras. Time to complete the family! Dha (sixth) and Ni (seventh) finish the saptaswar — the seven-note scale. With all seven, you can play the full ascending scale (aaroh) and descending scale (avroh).",
+        "songId": null,
+        "durationSeconds": null
+      },
+      {
+        "stepType": "listen",
+        "content": "Listen to the complete sargam scale: Sa Re Ga Ma Pa Dha Ni Sa (upper). Then hear it descend: Sa Ni Dha Pa Ma Ga Re Sa. Notice how the upper Sa sounds like a brighter version of the starting Sa.",
+        "songId": null,
+        "durationSeconds": 20
+      },
+      {
+        "stepType": "read",
+        "content": "Dha corresponds to A and Ni corresponds to B in the key of C. The upper Sa is one octave above the starting Sa (middle C to high C). In Indian music, we call the lower octave Mandra, the middle octave Madhya, and the upper octave Taar.",
+        "songId": null,
+        "durationSeconds": null
+      },
+      {
+        "stepType": "exercise",
+        "content": "Sing the full ascending scale: Sa Re Ga Ma Pa Dha Ni Sa. Then descend: Sa Ni Dha Pa Ma Ga Re Sa. Use Ode to Joy as a reference — it uses many of these notes in sequence.",
+        "songId": "ode-to-joy-v1",
+        "durationSeconds": 45
+      },
+      {
+        "stepType": "practice",
+        "content": "Practice the full scale three times ascending and three times descending. Try to maintain even spacing between each note.",
+        "songId": null,
+        "durationSeconds": 60
+      },
+      {
+        "stepType": "quiz",
+        "content": "[{\"id\":\"L4-Q1\",\"questionText\":\"How many swaras are in the complete sargam scale?\",\"options\":[\"5\",\"6\",\"7\",\"8\"],\"correctAnswerIndex\":2,\"audioClip\":null,\"questionType\":\"sargamMatching\"},{\"id\":\"L4-Q2\",\"questionText\":\"Which swara comes just before upper Sa in the ascending scale?\",\"options\":[\"Dha\",\"Ni\",\"Pa\",\"Ma\"],\"correctAnswerIndex\":1,\"audioClip\":null,\"questionType\":\"sargamMatching\"},{\"id\":\"L4-Q3\",\"questionText\":\"What is the Indian name for the middle octave?\",\"options\":[\"Mandra\",\"Madhya\",\"Taar\",\"Saptak\"],\"correctAnswerIndex\":1,\"audioClip\":null,\"questionType\":\"sargamMatching\"}]",
+        "songId": null,
+        "durationSeconds": null
+      }
+    ],
+    "isFree": true
+  },
+  {
+    "lessonId": "lesson-ascending-descending-v1",
+    "title": "Aaroh and Avroh: Going Up and Down",
+    "lessonDescription": "Master ascending (aaroh) and descending (avroh) scale patterns. Learn how melodies use directional movement and practice smooth transitions between notes.",
+    "difficulty": 2,
+    "orderIndex": 4,
+    "prerequisiteLessonIds": ["lesson-full-sargam-v1"],
+    "associatedSongIds": ["london-bridge-v1"],
+    "steps": [
+      {
+        "stepType": "intro",
+        "content": "Every melody moves up and down. In Indian music, the ascending pattern is called Aaroh and the descending pattern is called Avroh. Mastering these patterns is essential — every raga is defined by its unique aaroh and avroh.",
+        "songId": null,
+        "durationSeconds": null
+      },
+      {
+        "stepType": "listen",
+        "content": "Listen to a simple aaroh-avroh cycle. Notice how the ascending phrase builds energy and the descending phrase releases it. This tension and release is the heart of melodic expression.",
+        "songId": null,
+        "durationSeconds": 15
+      },
+      {
+        "stepType": "exercise",
+        "content": "Practice this pattern: Sa Re Ga Ma Pa (aaroh), then Pa Ma Ga Re Sa (avroh). Next try: Sa Ga Pa (skip pattern up), Pa Ga Sa (skip pattern down). Skipping notes creates a different musical feeling.",
+        "songId": "london-bridge-v1",
+        "durationSeconds": 45
+      },
+      {
+        "stepType": "sing",
+        "content": "Sing along with London Bridge mapped to sargam. Pay attention to which phrases go up (aaroh) and which come down (avroh). Mark in your mind where the melody changes direction.",
+        "songId": "london-bridge-v1",
+        "durationSeconds": 50
+      },
+      {
+        "stepType": "quiz",
+        "content": "[{\"id\":\"L5-Q1\",\"questionText\":\"What is the ascending scale pattern called in Indian music?\",\"options\":[\"Avroh\",\"Aaroh\",\"Saptak\",\"Taal\"],\"correctAnswerIndex\":1,\"audioClip\":null,\"questionType\":\"sargamMatching\"},{\"id\":\"L5-Q2\",\"questionText\":\"In the pattern Sa Ga Pa, what are you doing?\",\"options\":[\"Playing every note\",\"Skipping notes ascending\",\"Descending\",\"Playing a raga\"],\"correctAnswerIndex\":1,\"audioClip\":null,\"questionType\":\"intervalRecognition\"},{\"id\":\"L5-Q3\",\"questionText\":\"What does the descending pattern (avroh) do to musical energy?\",\"options\":[\"Builds it\",\"Releases it\",\"Keeps it the same\",\"Stops it\"],\"correctAnswerIndex\":1,\"audioClip\":null,\"questionType\":\"sargamMatching\"}]",
+        "songId": null,
+        "durationSeconds": null
+      }
+    ],
+    "isFree": false
+  },
+  {
+    "lessonId": "lesson-first-raga-v1",
+    "title": "Your First Raga: Yaman",
+    "lessonDescription": "Discover Raag Yaman, one of the most beautiful and beginner-friendly ragas. Learn its unique note pattern with Tivra Ma and practice its characteristic phrases.",
+    "difficulty": 2,
+    "orderIndex": 5,
+    "prerequisiteLessonIds": ["lesson-full-sargam-v1"],
+    "associatedSongIds": ["raag-yaman-ektaal-v1"],
+    "steps": [
+      {
+        "stepType": "intro",
+        "content": "A raga is not just a scale — it is a melodic framework with rules about which notes to use, how to approach them, and what mood to evoke. Raag Yaman is traditionally the first raga taught to students. It uses all seven swaras, but with Tivra Ma (raised fourth) instead of regular Ma.",
+        "songId": null,
+        "durationSeconds": null
+      },
+      {
+        "stepType": "listen",
+        "content": "Listen to a Raag Yaman phrase. Notice the Tivra Ma — it sounds slightly higher than the regular Ma you learned before. The aaroh of Yaman is: Ni Re Ga Ma(tivra) Pa Dha Ni Sa. The avroh is: Sa Ni Dha Pa Ma(tivra) Ga Re Sa.",
+        "songId": "raag-yaman-ektaal-v1",
+        "durationSeconds": 30
+      },
+      {
+        "stepType": "read",
+        "content": "Raag Yaman key facts: Time — first raga of the evening (sandhya prakar). Mood — devotional, serene, romantic. Special note — Tivra Ma (F# in Western). Vadi (most important note) — Ga. Samvadi (second most) — Ni. Yaman avoids starting on Sa in the aaroh — it typically begins from Ni of the lower octave.",
+        "songId": null,
+        "durationSeconds": null
+      },
+      {
+        "stepType": "exercise",
+        "content": "Practice the Yaman aaroh: Ni Re Ga Ma(tivra) Pa Dha Ni Sa. Then the avroh: Sa Ni Dha Pa Ma(tivra) Ga Re Sa. Focus on making the Tivra Ma distinct from regular Ma.",
+        "songId": "raag-yaman-ektaal-v1",
+        "durationSeconds": 50
+      },
+      {
+        "stepType": "practice",
+        "content": "Try singing a simple Yaman phrase: Ni Re Ga, Re Ga Ma(tivra) Pa, Ga Ma(tivra) Dha Pa. Let each phrase breathe naturally before starting the next.",
+        "songId": null,
+        "durationSeconds": 60
+      },
+      {
+        "stepType": "quiz",
+        "content": "[{\"id\":\"L6-Q1\",\"questionText\":\"What makes Raag Yaman different from the basic sargam scale?\",\"options\":[\"It uses Komal Re\",\"It uses Tivra Ma\",\"It skips Pa\",\"It has 8 notes\"],\"correctAnswerIndex\":1,\"audioClip\":null,\"questionType\":\"sargamMatching\"},{\"id\":\"L6-Q2\",\"questionText\":\"What is the vadi (most important note) of Raag Yaman?\",\"options\":[\"Sa\",\"Ma\",\"Ga\",\"Pa\"],\"correctAnswerIndex\":2,\"audioClip\":null,\"questionType\":\"noteIdentification\"},{\"id\":\"L6-Q3\",\"questionText\":\"When is Raag Yaman traditionally performed?\",\"options\":[\"Morning\",\"Afternoon\",\"Evening\",\"Midnight\"],\"correctAnswerIndex\":2,\"audioClip\":null,\"questionType\":\"sargamMatching\"}]",
+        "songId": null,
+        "durationSeconds": null
+      }
+    ],
+    "isFree": false
+  },
+  {
+    "lessonId": "lesson-rhythm-basics-v1",
+    "title": "Rhythm and Taal Basics",
+    "lessonDescription": "Learn the fundamentals of Indian rhythm (taal). Understand beats, sam, and khali. Practice clapping patterns and playing melodies in time with a metronome.",
+    "difficulty": 3,
+    "orderIndex": 6,
+    "prerequisiteLessonIds": ["lesson-ascending-descending-v1", "lesson-first-raga-v1"],
+    "associatedSongIds": ["happy-birthday-v1"],
+    "steps": [
+      {
+        "stepType": "intro",
+        "content": "Melody is only half the picture — rhythm brings music to life. In Indian music, rhythm is organized into taal (rhythmic cycles). The most common is Teentaal, a cycle of 16 beats divided into 4 groups of 4. The first beat (sam) is the strongest, and the ninth beat (khali) is empty — no clap.",
+        "songId": null,
+        "durationSeconds": null
+      },
+      {
+        "stepType": "listen",
+        "content": "Listen to a Teentaal cycle: 16 beats organized as 4+4+4+4. Clap on beats 1, 5, 13 (tali) and wave on beat 9 (khali). The pattern is: Clap-2-3-4 | Clap-2-3-4 | Wave-2-3-4 | Clap-2-3-4.",
+        "songId": null,
+        "durationSeconds": 20
+      },
+      {
+        "stepType": "read",
+        "content": "Taal terminology: Sam — the first beat (most important, where musical phrases land). Tali — clap beats (strong accents). Khali — empty beat (wave of the hand, no clap). Matra — a single beat. Avartan — one complete cycle of the taal. Teentaal has 16 matras per avartan.",
+        "songId": null,
+        "durationSeconds": null
+      },
+      {
+        "stepType": "exercise",
+        "content": "Clap along with the metronome in groups of 4 beats. First, simply keep time. Then try singing Sa on beat 1, Re on beat 2, Ga on beat 3, Ma on beat 4. Use Happy Birthday as a familiar melody to feel rhythmic phrasing.",
+        "songId": "happy-birthday-v1",
+        "durationSeconds": 45
+      },
+      {
+        "stepType": "practice",
+        "content": "Practice clapping Teentaal on your own: Clap-2-3-4, Clap-2-3-4, Wave-2-3-4, Clap-2-3-4. Do 4 complete cycles (avartans) without losing count.",
+        "songId": null,
+        "durationSeconds": 60
+      },
+      {
+        "stepType": "quiz",
+        "content": "[{\"id\":\"L7-Q1\",\"questionText\":\"How many beats are in one cycle of Teentaal?\",\"options\":[\"8\",\"12\",\"16\",\"20\"],\"correctAnswerIndex\":2,\"audioClip\":null,\"questionType\":\"sargamMatching\"},{\"id\":\"L7-Q2\",\"questionText\":\"What is the first beat of a taal cycle called?\",\"options\":[\"Matra\",\"Sam\",\"Khali\",\"Tali\"],\"correctAnswerIndex\":1,\"audioClip\":null,\"questionType\":\"sargamMatching\"},{\"id\":\"L7-Q3\",\"questionText\":\"On which beat do you wave instead of clap in Teentaal?\",\"options\":[\"Beat 1\",\"Beat 5\",\"Beat 9\",\"Beat 13\"],\"correctAnswerIndex\":2,\"audioClip\":null,\"questionType\":\"intervalRecognition\"}]",
+        "songId": null,
+        "durationSeconds": null
+      }
+    ],
+    "isFree": false
+  },
+  {
+    "lessonId": "lesson-melody-expression-v1",
+    "title": "Adding Expression to Melodies",
+    "lessonDescription": "Move beyond playing notes mechanically. Learn how dynamics, phrasing, and sustain bring emotion to a melody. Practice expressive techniques with a gentle song.",
+    "difficulty": 3,
+    "orderIndex": 7,
+    "prerequisiteLessonIds": ["lesson-rhythm-basics-v1"],
+    "associatedSongIds": ["amazing-grace-v1"],
+    "steps": [
+      {
+        "stepType": "intro",
+        "content": "Playing the right notes is important, but how you play them makes music beautiful. Expression includes dynamics (loud and soft), sustain (how long you hold a note), and phrasing (how you group notes into musical sentences). A melody played with expression tells a story.",
+        "songId": null,
+        "durationSeconds": null
+      },
+      {
+        "stepType": "listen",
+        "content": "Listen to Amazing Grace played two ways: first mechanically (every note the same volume and length), then expressively (with dynamics and phrasing). Notice how different the same notes can sound.",
+        "songId": "amazing-grace-v1",
+        "durationSeconds": 30
+      },
+      {
+        "stepType": "read",
+        "content": "Key expression concepts: Dynamics — play some notes louder (forte) for emphasis and others softer (piano) for tenderness. Sustain — hold important notes longer to create emphasis. Phrasing — think of music in sentences, breathe between phrases. In Indian music, these concepts are part of rasa (emotional essence).",
+        "songId": null,
+        "durationSeconds": null
+      },
+      {
+        "stepType": "exercise",
+        "content": "Play the first phrase of Amazing Grace. On the highest note of each phrase, play slightly louder. At the end of each phrase, let the last note ring a bit longer. Feel the natural rise and fall of the melody.",
+        "songId": "amazing-grace-v1",
+        "durationSeconds": 50
+      },
+      {
+        "stepType": "quiz",
+        "content": "[{\"id\":\"L8-Q1\",\"questionText\":\"What does 'dynamics' mean in music?\",\"options\":[\"Speed changes\",\"Volume changes\",\"Note changes\",\"Rhythm changes\"],\"correctAnswerIndex\":1,\"audioClip\":null,\"questionType\":\"sargamMatching\"},{\"id\":\"L8-Q2\",\"questionText\":\"What is the Indian concept for emotional essence in music?\",\"options\":[\"Taal\",\"Raga\",\"Rasa\",\"Shruti\"],\"correctAnswerIndex\":2,\"audioClip\":null,\"questionType\":\"sargamMatching\"},{\"id\":\"L8-Q3\",\"questionText\":\"What does 'phrasing' mean when playing a melody?\",\"options\":[\"Playing faster\",\"Grouping notes into musical sentences\",\"Playing louder\",\"Skipping notes\"],\"correctAnswerIndex\":1,\"audioClip\":null,\"questionType\":\"sargamMatching\"}]",
+        "songId": null,
+        "durationSeconds": null
+      }
+    ],
+    "isFree": false
+  },
+  {
+    "lessonId": "lesson-ornaments-intro-v1",
+    "title": "Meend and Gamak: Ornamental Notes",
+    "lessonDescription": "Discover Indian ornamental techniques: meend (gliding between notes) and gamak (rapid oscillation). These alankar give Indian music its distinctive, expressive character.",
+    "difficulty": 3,
+    "orderIndex": 8,
+    "prerequisiteLessonIds": ["lesson-melody-expression-v1"],
+    "associatedSongIds": ["raag-yaman-ektaal-v1"],
+    "steps": [
+      {
+        "stepType": "intro",
+        "content": "Indian classical music is rich with ornamental techniques called alankar. Two of the most fundamental are meend (a smooth glide from one note to another) and gamak (a rapid oscillation or shake on a note). These ornaments are what make Indian music sound distinctly different from Western music.",
+        "songId": null,
+        "durationSeconds": null
+      },
+      {
+        "stepType": "listen",
+        "content": "Listen to a Raag Yaman phrase played plain, then with meend (glide from Ga to Ma), and finally with gamak (oscillation on Dha). Each ornament adds a layer of beauty and emotion that plain notes cannot achieve.",
+        "songId": "raag-yaman-ektaal-v1",
+        "durationSeconds": 25
+      },
+      {
+        "stepType": "read",
+        "content": "Meend: A continuous glide between two notes, touching all microtones (shrutis) in between. On piano, this is approximated by rapid stepwise movement. In vocal music and string instruments, it is seamless. Gamak: A rapid oscillation around a note, often between the note and its neighbor. It adds weight and intensity. Both meend and gamak are essential in raga performance.",
+        "songId": null,
+        "durationSeconds": null
+      },
+      {
+        "stepType": "exercise",
+        "content": "Practice a simple meend: Start on Sa, slowly glide up to Re, then Re to Ga. On piano, play Sa then quickly brush through the black key to reach Re smoothly. For gamak, rapidly alternate between Dha and Pa several times, landing firmly on Dha.",
+        "songId": "raag-yaman-ektaal-v1",
+        "durationSeconds": 50
+      },
+      {
+        "stepType": "practice",
+        "content": "Apply meend and gamak to a Yaman phrase: Start with Ni-Re (meend up), then Ga with gamak, then Ma(tivra) Pa (meend down). Let the ornaments flow naturally — do not rush them.",
+        "songId": null,
+        "durationSeconds": 60
+      },
+      {
+        "stepType": "quiz",
+        "content": "[{\"id\":\"L9-Q1\",\"questionText\":\"What is a meend?\",\"options\":[\"A rapid shake on one note\",\"A smooth glide between two notes\",\"A pause between phrases\",\"A loud accent\"],\"correctAnswerIndex\":1,\"audioClip\":null,\"questionType\":\"sargamMatching\"},{\"id\":\"L9-Q2\",\"questionText\":\"What is gamak?\",\"options\":[\"A smooth glide\",\"A rest between notes\",\"A rapid oscillation on a note\",\"A type of taal\"],\"correctAnswerIndex\":2,\"audioClip\":null,\"questionType\":\"sargamMatching\"},{\"id\":\"L9-Q3\",\"questionText\":\"What are ornamental techniques collectively called in Indian music?\",\"options\":[\"Raga\",\"Taal\",\"Alankar\",\"Saptak\"],\"correctAnswerIndex\":2,\"audioClip\":null,\"questionType\":\"sargamMatching\"}]",
+        "songId": null,
+        "durationSeconds": null
+      }
+    ],
+    "isFree": false
+  },
+  {
+    "lessonId": "lesson-putting-together-v1",
+    "title": "Putting It All Together",
+    "lessonDescription": "Combine scales, raga knowledge, rhythm, expression, and ornaments to perform a complete piece. Apply everything you have learned to Jana Gana Mana in sargam notation.",
+    "difficulty": 4,
+    "orderIndex": 9,
+    "prerequisiteLessonIds": ["lesson-ornaments-intro-v1"],
+    "associatedSongIds": ["jana-gana-mana-v1"],
+    "steps": [
+      {
+        "stepType": "intro",
+        "content": "This is your graduation lesson. You have learned the sargam scale, ascending and descending patterns, your first raga, rhythm, expression, and ornaments. Now it is time to put everything together and perform Jana Gana Mana — India's national anthem — with musicality and feeling.",
+        "songId": null,
+        "durationSeconds": null
+      },
+      {
+        "stepType": "listen",
+        "content": "Listen to the complete arrangement of Jana Gana Mana in sargam notation. Pay attention to the phrasing, dynamics, and how the melody rises and falls through different sections. This piece uses notes from Sa to upper Sa and demands smooth transitions.",
+        "songId": "jana-gana-mana-v1",
+        "durationSeconds": 40
+      },
+      {
+        "stepType": "read",
+        "content": "Performance checklist: 1) Know your notes — identify each swara before playing. 2) Feel the rhythm — Jana Gana Mana is in a marching tempo. 3) Add expression — crescendo in the patriotic sections, soften in the lyrical passages. 4) Use subtle meend where notes connect smoothly. 5) Breathe between phrases, just as a singer would.",
+        "songId": null,
+        "durationSeconds": null
+      },
+      {
+        "stepType": "exercise",
+        "content": "Play through Jana Gana Mana section by section. First, play the notes plainly to get them right. Then add dynamics — louder on 'Jana Gana Mana Adhinayaka' and softer on the transitional phrases. Finally, add subtle meend on the longer notes.",
+        "songId": "jana-gana-mana-v1",
+        "durationSeconds": 60
+      },
+      {
+        "stepType": "practice",
+        "content": "Perform the entire piece from start to finish without stopping. Focus on maintaining a steady tempo, clear notes, and expressive phrasing. Record yourself if you can — listening back is the best teacher.",
+        "songId": null,
+        "durationSeconds": 90
+      },
+      {
+        "stepType": "quiz",
+        "content": "[{\"id\":\"L10-Q1\",\"questionText\":\"What should you do before adding expression to a melody?\",\"options\":[\"Play it very fast\",\"Learn the correct notes first\",\"Add ornaments first\",\"Skip the easy parts\"],\"correctAnswerIndex\":1,\"audioClip\":null,\"questionType\":\"sargamMatching\"},{\"id\":\"L10-Q2\",\"questionText\":\"Which ornamental technique involves a smooth glide between notes?\",\"options\":[\"Gamak\",\"Taal\",\"Meend\",\"Saptak\"],\"correctAnswerIndex\":2,\"audioClip\":null,\"questionType\":\"sargamMatching\"},{\"id\":\"L10-Q3\",\"questionText\":\"What does crescendo mean in the context of musical expression?\",\"options\":[\"Getting softer\",\"Getting faster\",\"Getting louder\",\"Getting slower\"],\"correctAnswerIndex\":2,\"audioClip\":null,\"questionType\":\"sargamMatching\"}]",
+        "songId": null,
+        "durationSeconds": null
+      }
+    ],
+    "isFree": false
   }
 ]

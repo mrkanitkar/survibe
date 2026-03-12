@@ -1,26 +1,30 @@
+import SwiftData
 import SwiftUI
 
-/// Full-screen step-by-step lesson experience.
+/// Full-screen step-by-step lesson experience driven by `LessonPlayerViewModel`.
 ///
-/// Presents lesson steps one at a time with navigation controls (back/next),
-/// a progress bar, and step counter. Each step type renders differently:
-/// - `intro`: Text card with lesson overview
-/// - `listen`: Audio placeholder
-/// - `read`: Text content display
-/// - `exercise`: Interactive placeholder
-/// - `practice`: Practice placeholder
-/// - `quiz`: Quiz placeholder
+/// Presents lesson steps one at a time with:
+/// - A progress bar showing overall step completion
+/// - Step content routed by step type (intro, listen, sing, exercise, quiz, read, practice)
+/// - Navigation controls that respect step gating (locked/unlocked)
+/// - A toolbar close button and step counter
 ///
-/// On the final step, shows a "Complete Lesson" button that triggers the
-/// completion callback and dismisses the view.
+/// ## Step Gating
+/// Each step type has a gate condition. For example, a "listen" step is locked
+/// until the audio finishes playing, and a "quiz" step is locked until all
+/// questions are answered. The "Next" button is disabled while the gate is locked.
+///
+/// ## Lifecycle
+/// On appear, creates the `LessonPlayerViewModel`, which restores the resume
+/// position from `LessonProgress`. On disappear, persists elapsed session time.
 struct LessonStepView: View {
     // MARK: - Properties
 
     /// The lesson being studied.
     let lesson: Lesson
 
-    /// The decoded steps to present.
-    let steps: [LessonStep]
+    /// Progress manager for step and lesson completion persistence.
+    let progressManager: LessonProgressManager
 
     /// Callback invoked when the lesson is completed.
     let onComplete: () -> Void
@@ -30,30 +34,21 @@ struct LessonStepView: View {
     @Environment(\.accessibilityReduceMotion)
     private var reduceMotion
 
-    /// The current step index (0-based).
+    /// The lesson player view model managing state and progression.
     @State
-    private var currentStepIndex = 0
+    private var viewModel: LessonPlayerViewModel?
 
     // MARK: - Body
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                // Progress bar
-                progressBar
-
-                // Step content
-                ScrollView {
-                    stepContent
-                        .padding()
-                        .id(currentStepIndex)
+            Group {
+                if let viewModel {
+                    phaseContent(viewModel: viewModel)
+                } else {
+                    ProgressView("Loading lesson…")
+                        .accessibilityLabel(Text("Loading lesson"))
                 }
-
-                Divider()
-
-                // Navigation controls
-                navigationControls
-                    .padding()
             }
             .navigationTitle(lesson.title)
             .navigationBarTitleDisplayMode(.inline)
@@ -68,22 +63,84 @@ struct LessonStepView: View {
                     .accessibilityHint(Text("Double tap to exit the lesson"))
                 }
 
-                ToolbarItem(placement: .topBarTrailing) {
-                    Text("\(currentStepIndex + 1) of \(steps.count)")
+                if let viewModel, case .active = viewModel.phase {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Text(
+                            "\(viewModel.currentStepIndex + 1) of \(viewModel.totalSteps)"
+                        )
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .accessibilityLabel(
-                            Text("Step \(currentStepIndex + 1) of \(steps.count)")
+                            Text(
+                                "Step \(viewModel.currentStepIndex + 1) of \(viewModel.totalSteps)"
+                            )
                         )
+                    }
                 }
             }
         }
+        .onAppear {
+            let vm = LessonPlayerViewModel(
+                lesson: lesson,
+                progressManager: progressManager
+            )
+            vm.onAppear()
+            viewModel = vm
+        }
+        .onDisappear {
+            viewModel?.onDisappear()
+        }
     }
 
-    // MARK: - Subviews
+    // MARK: - Phase Content
 
-    /// Progress bar showing step completion.
-    private var progressBar: some View {
+    /// Routes to the appropriate content based on the player phase.
+    ///
+    /// - Parameter viewModel: The lesson player view model.
+    /// - Returns: The view for the current phase.
+    @ViewBuilder
+    private func phaseContent(viewModel: LessonPlayerViewModel) -> some View {
+        switch viewModel.phase {
+        case .loading:
+            ProgressView("Loading lesson…")
+                .accessibilityLabel(Text("Loading lesson"))
+
+        case .active:
+            VStack(spacing: 0) {
+                // Progress bar
+                progressBar(viewModel: viewModel)
+
+                // Step content
+                ScrollView {
+                    stepContent(viewModel: viewModel)
+                        .padding()
+                        .id(viewModel.currentStepIndex)
+                }
+
+                // Gate status indicator
+                if case .locked(let reason) = viewModel.gateStatus {
+                    gateIndicator(reason: reason)
+                }
+
+                Divider()
+
+                // Navigation controls
+                navigationControls(viewModel: viewModel)
+                    .padding()
+            }
+
+        case .completed:
+            completedContent
+        }
+    }
+
+    // MARK: - Progress Bar
+
+    /// Progress bar showing step completion fraction.
+    ///
+    /// - Parameter viewModel: The lesson player view model.
+    /// - Returns: A thin horizontal bar indicating progress.
+    private func progressBar(viewModel: LessonPlayerViewModel) -> some View {
         GeometryReader { geometry in
             ZStack(alignment: .leading) {
                 Rectangle()
@@ -92,7 +149,11 @@ struct LessonStepView: View {
                 Rectangle()
                     .fill(Color.accentColor)
                     .frame(
-                        width: geometry.size.width * progressFraction
+                        width: geometry.size.width * viewModel.progressFraction
+                    )
+                    .animation(
+                        reduceMotion ? nil : .easeInOut(duration: 0.3),
+                        value: viewModel.progressFraction
                     )
             }
         }
@@ -100,150 +161,468 @@ struct LessonStepView: View {
         .accessibilityHidden(true)
     }
 
-    /// Content area for the current step.
+    // MARK: - Step Content Router
+
+    /// Routes to the appropriate step type view based on the current step.
+    ///
+    /// Each step type renders a badge header, the main content, and
+    /// step-type-specific interactive elements. Interactive steps (listen,
+    /// sing, exercise, quiz) call back to the view model when completed.
+    ///
+    /// - Parameter viewModel: The lesson player view model.
+    /// - Returns: The content view for the current step type.
     @ViewBuilder
-    private var stepContent: some View {
-        let step = steps[currentStepIndex]
+    private func stepContent(viewModel: LessonPlayerViewModel) -> some View {
+        if let step = viewModel.currentStep {
+            VStack(alignment: .leading, spacing: 16) {
+                // Step type badge
+                stepTypeBadge(step: step)
 
-        VStack(alignment: .leading, spacing: 16) {
-            // Step type badge
-            HStack {
-                Image(systemName: stepTypeIcon(step.stepType))
-                    .foregroundStyle(stepTypeColor(step.stepType))
-                Text(stepTypeLabel(step.stepType))
-                    .fontWeight(.semibold)
-                    .foregroundStyle(stepTypeColor(step.stepType))
+                // Route to step-type-specific content
+                stepTypeContent(step: step, viewModel: viewModel)
+
+                // Duration indicator (if available)
+                if let seconds = step.durationSeconds {
+                    Label(
+                        durationLabel(seconds),
+                        systemImage: "timer"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
             }
-            .font(.subheadline)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(
-                Capsule()
-                    .fill(stepTypeColor(step.stepType).opacity(0.15))
-            )
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(Text("Step type: \(stepTypeLabel(step.stepType))"))
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
 
-            // Main content
+    /// Badge showing the step type with icon and label.
+    ///
+    /// - Parameter step: The current lesson step.
+    /// - Returns: A capsule-styled badge.
+    private func stepTypeBadge(step: LessonStep) -> some View {
+        HStack {
+            Image(systemName: stepTypeIcon(step.stepType))
+                .foregroundStyle(stepTypeColor(step.stepType))
+            Text(stepTypeLabel(step.stepType))
+                .fontWeight(.semibold)
+                .foregroundStyle(stepTypeColor(step.stepType))
+        }
+        .font(.subheadline)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(
+            Capsule()
+                .fill(stepTypeColor(step.stepType).opacity(0.15))
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Text("Step type: \(stepTypeLabel(step.stepType))"))
+    }
+
+    /// Routes to the correct content view based on step type.
+    ///
+    /// - Parameters:
+    ///   - step: The current lesson step.
+    ///   - viewModel: The lesson player view model for callbacks.
+    /// - Returns: The step-type-specific content view.
+    @ViewBuilder
+    private func stepTypeContent(step: LessonStep, viewModel: LessonPlayerViewModel) -> some View {
+        switch step.stepType {
+        case "intro", "read":
+            introReadContent(step: step)
+
+        case "listen":
+            listenContent(step: step, viewModel: viewModel)
+
+        case "sing":
+            singContent(step: step, viewModel: viewModel)
+
+        case "exercise", "practice":
+            exerciseContent(step: step, viewModel: viewModel)
+
+        case "quiz":
+            quizContent(step: step, viewModel: viewModel)
+
+        default:
             Text(verbatim: step.content)
                 .font(.body)
                 .lineSpacing(6)
+        }
+    }
+}
 
-            // Duration indicator (if available)
-            if let seconds = step.durationSeconds {
-                Label(
-                    durationLabel(seconds),
-                    systemImage: "timer"
-                )
+// MARK: - Step Type Views & Helpers
+
+private extension LessonStepView {
+
+    // MARK: Gate Indicator
+
+    /// Displays the current gate lock reason.
+    ///
+    /// - Parameter reason: The user-facing reason the step is locked.
+    /// - Returns: A subtle banner explaining why the Next button is disabled.
+    func gateIndicator(reason: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "lock.fill")
+                .font(.caption)
+                .foregroundStyle(.orange)
+                .accessibilityHidden(true)
+
+            Text(reason)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            }
-
-            // Step-type-specific placeholder
-            stepTypePlaceholder(step.stepType)
         }
+        .padding(.horizontal)
+        .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.secondarySystemBackground))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Text("Step locked: \(reason)"))
+    }
+
+    // MARK: Navigation Controls
+
+    /// Executes an action with optional animation respecting reduce motion.
+    func animatedAction(_ action: @escaping () -> Void) {
+        if reduceMotion {
+            action()
+        } else {
+            withAnimation(.easeInOut(duration: 0.25)) { action() }
+        }
     }
 
     /// Navigation buttons (Previous / Next / Complete).
-    private var navigationControls: some View {
+    ///
+    /// The "Next" button is disabled when the step gate is locked.
+    /// On the last step, shows "Complete Lesson" instead of "Next".
+    ///
+    /// - Parameter viewModel: The lesson player view model.
+    /// - Returns: A horizontal stack of navigation buttons.
+    func navigationControls(viewModel: LessonPlayerViewModel) -> some View {
         HStack {
-            // Previous button
-            Button {
-                navigateToPreviousStep()
-            } label: {
+            Button { animatedAction { viewModel.goToPreviousStep() } } label: {
                 Label("Previous", systemImage: "chevron.left")
-                    .font(.body)
-                    .fontWeight(.medium)
+                    .font(.body).fontWeight(.medium)
             }
-            .disabled(currentStepIndex == 0)
+            .disabled(!viewModel.canGoBack)
             .accessibilityLabel(Text("Previous step"))
             .accessibilityHint(Text("Double tap to go to the previous step"))
 
             Spacer()
 
-            // Next / Complete button
-            if isLastStep {
-                Button {
-                    onComplete()
-                    dismiss()
-                } label: {
-                    Text("Complete Lesson")
-                        .font(.body)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 10)
-                        .background(
-                            Capsule()
-                                .fill(.green)
-                        )
-                }
-                .accessibilityLabel(Text("Complete lesson"))
-                .accessibilityHint(
-                    Text("Double tap to mark this lesson as completed and close")
-                )
+            if viewModel.isLastStep {
+                completeLessonButton(viewModel: viewModel)
             } else {
-                Button {
-                    navigateToNextStep()
-                } label: {
-                    Label("Next", systemImage: "chevron.right")
-                        .font(.body)
-                        .fontWeight(.medium)
-                        .labelStyle(.titleAndIcon)
-                }
-                .accessibilityLabel(Text("Next step"))
-                .accessibilityHint(Text("Double tap to go to the next step"))
+                nextStepButton(viewModel: viewModel)
             }
         }
     }
 
-    /// Placeholder content for step types that need special UI.
-    @ViewBuilder
-    private func stepTypePlaceholder(_ type: String) -> some View {
-        switch type {
-        case "listen":
-            placeholderCard(
-                icon: "headphones",
-                title: "Audio Playback",
-                description: "Audio playback coming soon"
-            )
+    /// "Complete Lesson" button shown on the last step.
+    func completeLessonButton(viewModel: LessonPlayerViewModel) -> some View {
+        Button { animatedAction { viewModel.goToNextStep() } } label: {
+            Text("Complete Lesson")
+                .font(.body).fontWeight(.semibold)
+                .foregroundStyle(.white)
+                .padding(.horizontal, 20).padding(.vertical, 10)
+                .background(Capsule().fill(viewModel.canGoNext ? .green : .gray))
+        }
+        .disabled(!viewModel.canGoNext)
+        .accessibilityLabel(Text("Complete lesson"))
+        .accessibilityHint(Text("Double tap to mark this lesson as completed and close"))
+    }
 
-        case "exercise":
-            placeholderCard(
-                icon: "hand.tap",
-                title: "Interactive Exercise",
-                description: "Interactive exercises coming soon"
-            )
+    /// "Next" button shown for non-final steps.
+    func nextStepButton(viewModel: LessonPlayerViewModel) -> some View {
+        Button { animatedAction { viewModel.goToNextStep() } } label: {
+            Label("Next", systemImage: "chevron.right")
+                .font(.body).fontWeight(.medium)
+                .labelStyle(.titleAndIcon)
+        }
+        .disabled(!viewModel.canGoNext)
+        .accessibilityLabel(Text("Next step"))
+        .accessibilityHint(Text("Double tap to go to the next step"))
+    }
 
-        case "practice":
-            placeholderCard(
-                icon: "music.mic",
-                title: "Practice Mode",
-                description: "Practice mode integration coming soon"
-            )
+    // MARK: Completed Content
 
-        case "quiz":
-            placeholderCard(
-                icon: "questionmark.circle",
-                title: "Quiz",
-                description: "Quizzes coming soon"
-            )
+    /// Content shown when the lesson is completed.
+    ///
+    /// Fires the `onComplete` callback and dismisses the view on appear.
+    var completedContent: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 60))
+                .foregroundStyle(.green)
+                .accessibilityHidden(true)
 
-        case "sing":
-            placeholderCard(
-                icon: "waveform",
-                title: "Sing Along",
-                description: "Sing along mode coming soon"
-            )
+            Text("Lesson Complete!")
+                .font(.title2)
+                .fontWeight(.bold)
 
-        default:
-            EmptyView()
+            if let viewModel, let score = viewModel.quizScore {
+                Text("Quiz Score: \(Int(score * 100))%")
+                    .font(.headline)
+                    .foregroundStyle(.secondary)
+            }
+
+            Text("Great work! You've completed this lesson.")
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            Button {
+                onComplete()
+                dismiss()
+            } label: {
+                Text("Done")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .foregroundStyle(.white)
+                    .background(
+                        RoundedRectangle(cornerRadius: 14)
+                            .fill(Color.accentColor)
+                    )
+            }
+            .padding(.horizontal, 40)
+            .accessibilityLabel(Text("Done"))
+            .accessibilityHint(Text("Double tap to close the lesson"))
+        }
+        .padding()
+        .onAppear {
+            // Trigger completion callback when the completed phase appears
+            onComplete()
         }
     }
 
+    // MARK: Step Type Views
+
+    /// Content view for intro and read step types.
+    ///
+    /// Displays the step content as readable text. These steps are always
+    /// unlocked and require no interaction to advance.
+    ///
+    /// - Parameter step: The lesson step to display.
+    /// - Returns: A text content view.
+    func introReadContent(step: LessonStep) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(verbatim: step.content)
+                .font(.body)
+                .lineSpacing(6)
+        }
+    }
+
+    /// Content view for listen step type.
+    ///
+    /// Displays the step content with an audio playback placeholder.
+    /// The gate unlocks when the learner taps the "Mark as Listened" button.
+    ///
+    /// - Parameters:
+    ///   - step: The lesson step to display.
+    ///   - viewModel: The view model for gate callbacks.
+    /// - Returns: A view with text and audio controls.
+    func listenContent(step: LessonStep, viewModel: LessonPlayerViewModel) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(verbatim: step.content)
+                .font(.body)
+                .lineSpacing(6)
+
+            placeholderCard(
+                icon: "headphones",
+                title: "Audio Playback",
+                description: "Audio playback will be available soon"
+            )
+
+            if viewModel.gateStatus != .unlocked {
+                Button {
+                    viewModel.listenCompleted()
+                } label: {
+                    Label("Mark as Listened", systemImage: "checkmark.circle")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .foregroundStyle(.white)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(Color.purple)
+                        )
+                }
+                .accessibilityLabel(Text("Mark as listened"))
+                .accessibilityHint(
+                    Text("Double tap to mark this step as listened and unlock the next step")
+                )
+            }
+        }
+    }
+
+    /// Content view for sing step type.
+    ///
+    /// Displays the step content with a singing placeholder.
+    /// The gate unlocks when accuracy >= 0.60 or the learner taps "Skip".
+    ///
+    /// - Parameters:
+    ///   - step: The lesson step to display.
+    ///   - viewModel: The view model for gate callbacks.
+    /// - Returns: A view with text and singing controls.
+    func singContent(step: LessonStep, viewModel: LessonPlayerViewModel) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(verbatim: step.content)
+                .font(.body)
+                .lineSpacing(6)
+
+            placeholderCard(
+                icon: "waveform",
+                title: "Sing Along",
+                description: "Sing along mode will be available soon"
+            )
+
+            if viewModel.gateStatus != .unlocked {
+                HStack(spacing: 12) {
+                    Button {
+                        viewModel.singManualAdvance()
+                    } label: {
+                        Text("Skip")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .foregroundStyle(.secondary)
+                            .background(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .fill(Color(.tertiarySystemBackground))
+                            )
+                    }
+                    .accessibilityLabel(Text("Skip singing"))
+                    .accessibilityHint(
+                        Text("Double tap to skip the singing step and continue")
+                    )
+
+                    Button {
+                        viewModel.singCompleted(accuracy: 1.0)
+                    } label: {
+                        Label("Done Singing", systemImage: "checkmark.circle")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .foregroundStyle(.white)
+                            .background(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .fill(Color.pink)
+                            )
+                    }
+                    .accessibilityLabel(Text("Done singing"))
+                    .accessibilityHint(
+                        Text("Double tap to mark singing as complete")
+                    )
+                }
+            }
+        }
+    }
+
+    /// Content view for exercise and practice step types.
+    ///
+    /// Displays the step content with an exercise placeholder.
+    /// The gate unlocks when the learner completes the exercise.
+    ///
+    /// - Parameters:
+    ///   - step: The lesson step to display.
+    ///   - viewModel: The view model for gate callbacks.
+    /// - Returns: A view with text and exercise controls.
+    func exerciseContent(
+        step: LessonStep,
+        viewModel: LessonPlayerViewModel
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(verbatim: step.content)
+                .font(.body)
+                .lineSpacing(6)
+
+            placeholderCard(
+                icon: step.stepType == "practice" ? "music.mic" : "hand.tap",
+                title: step.stepType == "practice" ? "Practice Mode" : "Interactive Exercise",
+                description: step.stepType == "practice"
+                    ? "Practice mode will be available soon"
+                    : "Interactive exercises will be available soon"
+            )
+
+            if viewModel.gateStatus != .unlocked {
+                Button {
+                    viewModel.exerciseCompleted()
+                } label: {
+                    Label("Mark as Complete", systemImage: "checkmark.circle")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .foregroundStyle(.white)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(Color.green)
+                        )
+                }
+                .accessibilityLabel(Text("Mark exercise as complete"))
+                .accessibilityHint(
+                    Text("Double tap to mark the exercise as complete and unlock the next step")
+                )
+            }
+        }
+    }
+
+    /// Content view for quiz step type.
+    ///
+    /// Displays the step content with a quiz placeholder.
+    /// The gate unlocks when the learner completes the quiz.
+    ///
+    /// - Parameters:
+    ///   - step: The lesson step to display.
+    ///   - viewModel: The view model for gate callbacks.
+    /// - Returns: A view with text and quiz controls.
+    func quizContent(step: LessonStep, viewModel: LessonPlayerViewModel) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(verbatim: step.content)
+                .font(.body)
+                .lineSpacing(6)
+
+            placeholderCard(
+                icon: "questionmark.circle",
+                title: "Quiz",
+                description: "Quizzes will be available soon"
+            )
+
+            if viewModel.gateStatus != .unlocked {
+                Button {
+                    viewModel.quizCompleted(score: 1.0)
+                } label: {
+                    Label("Complete Quiz", systemImage: "checkmark.circle")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .foregroundStyle(.white)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(Color.yellow)
+                        )
+                }
+                .accessibilityLabel(Text("Complete quiz"))
+                .accessibilityHint(
+                    Text("Double tap to mark the quiz as complete and unlock the next step")
+                )
+            }
+        }
+    }
+
+    // MARK: Helper Views
     /// A placeholder card for unimplemented step features.
-    private func placeholderCard(
+    ///
+    /// - Parameters:
+    ///   - icon: SF Symbol name for the card icon.
+    ///   - title: Headline text.
+    ///   - description: Caption text.
+    /// - Returns: A styled card view.
+    func placeholderCard(
         icon: String,
         title: String,
         description: String
@@ -271,48 +650,11 @@ struct LessonStepView: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(Text("\(title): \(description)"))
     }
-
-    // MARK: - Computed Properties
-
-    /// Progress as a fraction (0.0–1.0).
-    private var progressFraction: Double {
-        guard !steps.isEmpty else { return 0 }
-        return Double(currentStepIndex + 1) / Double(steps.count)
-    }
-
-    /// Whether the current step is the last one.
-    private var isLastStep: Bool {
-        currentStepIndex == steps.count - 1
-    }
-
-    // MARK: - Private Methods
-
-    /// Navigate to the previous step with animation.
-    private func navigateToPreviousStep() {
-        guard currentStepIndex > 0 else { return }
-        if reduceMotion {
-            currentStepIndex -= 1
-        } else {
-            withAnimation(.easeInOut(duration: 0.25)) {
-                currentStepIndex -= 1
-            }
-        }
-    }
-
-    /// Navigate to the next step with animation.
-    private func navigateToNextStep() {
-        guard currentStepIndex < steps.count - 1 else { return }
-        if reduceMotion {
-            currentStepIndex += 1
-        } else {
-            withAnimation(.easeInOut(duration: 0.25)) {
-                currentStepIndex += 1
-            }
-        }
-    }
-
     /// Human-readable label for a step type.
-    private func stepTypeLabel(_ type: String) -> String {
+    ///
+    /// - Parameter type: The step type string identifier.
+    /// - Returns: A display-friendly label.
+    func stepTypeLabel(_ type: String) -> String {
         switch type {
         case "intro": "Introduction"
         case "listen": "Listen"
@@ -325,8 +667,11 @@ struct LessonStepView: View {
         }
     }
 
-    /// SF Symbol icon for a step type.
-    private func stepTypeIcon(_ type: String) -> String {
+    /// SF Symbol icon name for a step type.
+    ///
+    /// - Parameter type: The step type string identifier.
+    /// - Returns: An SF Symbol name.
+    func stepTypeIcon(_ type: String) -> String {
         switch type {
         case "intro": "text.book.closed"
         case "listen": "headphones"
@@ -339,8 +684,11 @@ struct LessonStepView: View {
         }
     }
 
-    /// Color for a step type.
-    private func stepTypeColor(_ type: String) -> Color {
+    /// Color associated with a step type.
+    ///
+    /// - Parameter type: The step type string identifier.
+    /// - Returns: A color for the step badge and icon.
+    func stepTypeColor(_ type: String) -> Color {
         switch type {
         case "intro": .blue
         case "listen": .purple
@@ -353,8 +701,11 @@ struct LessonStepView: View {
         }
     }
 
-    /// Format seconds into a human-readable duration.
-    private func durationLabel(_ seconds: Int) -> String {
+    /// Format seconds into a human-readable duration string.
+    ///
+    /// - Parameter seconds: Duration in seconds.
+    /// - Returns: A formatted string like "30s", "2 min", or "1m 30s".
+    func durationLabel(_ seconds: Int) -> String {
         if seconds < 60 {
             return "\(seconds)s"
         }

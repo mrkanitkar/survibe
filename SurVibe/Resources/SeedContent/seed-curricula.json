@@ -1,0 +1,30 @@
+[
+  {
+    "curriculumId": "curriculum-sargam-foundations",
+    "title": "Sargam Foundations",
+    "curriculumDescription": "Master the basics of Indian classical music notation. Learn all seven swaras, basic scale patterns, and your first raga.",
+    "lessonIds": [
+      "lesson-meet-swaras-v1",
+      "lesson-first-melody-v1",
+      "lesson-ma-pa-intro-v1",
+      "lesson-full-sargam-v1",
+      "lesson-ascending-descending-v1",
+      "lesson-first-raga-v1"
+    ],
+    "minDifficulty": 1,
+    "maxDifficulty": 2
+  },
+  {
+    "curriculumId": "curriculum-melodic-expression",
+    "title": "Melodic Expression",
+    "curriculumDescription": "Go beyond notes and scales. Learn rhythm, expression, ornamental techniques, and how to bring a melody to life.",
+    "lessonIds": [
+      "lesson-rhythm-basics-v1",
+      "lesson-melody-expression-v1",
+      "lesson-ornaments-intro-v1",
+      "lesson-putting-together-v1"
+    ],
+    "minDifficulty": 3,
+    "maxDifficulty": 4
+  }
+]

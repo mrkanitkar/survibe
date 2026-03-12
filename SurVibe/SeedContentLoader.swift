@@ -26,7 +26,8 @@ final class SeedContentLoader {
     /// - v3: +Jana Gana Mana, enhanced Morya Morya with MIDI playback data
     /// - v4: +5 English songs (Happy Birthday, London Bridge, Ode to Joy, Amazing Grace, Für Elise Theme)
     /// - v5: +keySignatureRaw, timeSignatureRaw fields on Song model for staff notation
-    private static let currentContentVersion = 5
+    /// - v6: +8 lessons (total 10), +2 curricula (Sargam Foundations, Melodic Expression)
+    private static let currentContentVersion = 6
 
     /// The stored seed content version from UserDefaults.
     static var storedContentVersion: Int {

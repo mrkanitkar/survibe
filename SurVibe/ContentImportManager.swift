@@ -24,13 +24,38 @@ final class ContentImportManager {
         var songCount: Int = 0
         /// Number of lessons successfully imported.
         var lessonCount: Int = 0
+        /// Number of curricula successfully imported.
+        var curriculumCount: Int = 0
         /// Descriptions of any non-fatal errors encountered.
         var errorDescriptions: [String] = []
 
         /// Human-readable summary.
         var description: String {
-            "Songs: \(songCount), Lessons: \(lessonCount), Errors: \(errorDescriptions.count)"
+            let counts = "Songs: \(songCount), Lessons: \(lessonCount)"
+            return "\(counts), Curricula: \(curriculumCount), Errors: \(errorDescriptions.count)"
         }
+    }
+
+    // MARK: - Private DTOs
+
+    /// Data transfer object for decoding curriculum JSON.
+    ///
+    /// Matches the schema in `seed-curricula.json`. Used only within
+    /// `ContentImportManager` — curricula do not have an SVLearning-level
+    /// importer because they are simple metadata containers.
+    private struct CurriculumDTO: Codable {
+        /// Unique curriculum identifier (e.g., "curriculum-sargam-foundations").
+        let curriculumId: String
+        /// Display title.
+        let title: String
+        /// Description of this learning path.
+        let curriculumDescription: String
+        /// Ordered lesson IDs in this curriculum.
+        let lessonIds: [String]
+        /// Minimum difficulty of lessons in this curriculum (1–5).
+        let minDifficulty: Int
+        /// Maximum difficulty of lessons in this curriculum (1–5).
+        let maxDifficulty: Int
     }
 
     // MARK: - Import All
@@ -54,56 +79,92 @@ final class ContentImportManager {
         var summary = ImportSummary()
         let context = ModelContext(container)
 
-        // Delete existing seed songs and lessons before re-importing.
-        // This prevents duplicates when the seed content version is bumped
-        // and the importer re-runs on an existing database.
         deleteExistingSeedContent(from: context)
+        importSongs(from: bundle, into: context, summary: &summary)
+        importLessons(from: bundle, into: context, summary: &summary)
+        importCurricula(from: bundle, into: context, summary: &summary)
 
-        // Import songs
-        if let songsURL = bundle.url(forResource: "seed-songs", withExtension: "json") {
-            do {
-                let data = try Data(contentsOf: songsURL)
-                let songDTOs = SongImporter.importSongs(from: data)
-                for dto in songDTOs {
-                    let song = mapSongDTO(dto)
-                    context.insert(song)
-                    summary.songCount += 1
-                }
-                logger.info("Imported \(summary.songCount) songs")
-            } catch {
-                logger.error("Error reading seed-songs.json: \(error)")
-                summary.errorDescriptions.append("Songs: \(error.localizedDescription)")
-            }
-        } else {
-            logger.warning("seed-songs.json not found in bundle")
-        }
-
-        // Import lessons
-        if let lessonsURL = bundle.url(forResource: "seed-lessons", withExtension: "json") {
-            do {
-                let data = try Data(contentsOf: lessonsURL)
-                let lessonDTOs = LessonImporter.importLessons(from: data)
-                for dto in lessonDTOs {
-                    let lesson = mapLessonDTO(dto)
-                    context.insert(lesson)
-                    summary.lessonCount += 1
-                }
-                logger.info("Imported \(summary.lessonCount) lessons")
-            } catch {
-                logger.error("Error reading seed-lessons.json: \(error)")
-                summary.errorDescriptions.append("Lessons: \(error.localizedDescription)")
-            }
-        } else {
-            logger.warning("seed-lessons.json not found in bundle")
-        }
-
-        // Save all changes
         try context.save()
         logger.info("Seed content saved: \(summary.description)")
         return summary
     }
 
-    /// Deletes all existing Song and Lesson records before a fresh seed import.
+    /// Imports songs from the bundled JSON into the context.
+    private static func importSongs(
+        from bundle: Bundle,
+        into context: ModelContext,
+        summary: inout ImportSummary
+    ) {
+        guard let url = bundle.url(forResource: "seed-songs", withExtension: "json") else {
+            logger.warning("seed-songs.json not found in bundle")
+            return
+        }
+        do {
+            let data = try Data(contentsOf: url)
+            let songDTOs = SongImporter.importSongs(from: data)
+            for dto in songDTOs {
+                context.insert(mapSongDTO(dto))
+                summary.songCount += 1
+            }
+            let count = summary.songCount
+            logger.info("Imported \(count) songs")
+        } catch {
+            logger.error("Error reading seed-songs.json: \(error)")
+            summary.errorDescriptions.append("Songs: \(error.localizedDescription)")
+        }
+    }
+
+    /// Imports lessons from the bundled JSON into the context.
+    private static func importLessons(
+        from bundle: Bundle,
+        into context: ModelContext,
+        summary: inout ImportSummary
+    ) {
+        guard let url = bundle.url(forResource: "seed-lessons", withExtension: "json") else {
+            logger.warning("seed-lessons.json not found in bundle")
+            return
+        }
+        do {
+            let data = try Data(contentsOf: url)
+            let lessonDTOs = LessonImporter.importLessons(from: data)
+            for dto in lessonDTOs {
+                context.insert(mapLessonDTO(dto))
+                summary.lessonCount += 1
+            }
+            let count = summary.lessonCount
+            logger.info("Imported \(count) lessons")
+        } catch {
+            logger.error("Error reading seed-lessons.json: \(error)")
+            summary.errorDescriptions.append("Lessons: \(error.localizedDescription)")
+        }
+    }
+
+    /// Imports curricula from the bundled JSON into the context.
+    private static func importCurricula(
+        from bundle: Bundle,
+        into context: ModelContext,
+        summary: inout ImportSummary
+    ) {
+        guard let url = bundle.url(forResource: "seed-curricula", withExtension: "json") else {
+            logger.warning("seed-curricula.json not found in bundle")
+            return
+        }
+        do {
+            let data = try Data(contentsOf: url)
+            let dtos = try JSONDecoder().decode([CurriculumDTO].self, from: data)
+            for dto in dtos {
+                context.insert(mapCurriculumDTO(dto))
+                summary.curriculumCount += 1
+            }
+            let count = summary.curriculumCount
+            logger.info("Imported \(count) curricula")
+        } catch {
+            logger.error("Error reading seed-curricula.json: \(error)")
+            summary.errorDescriptions.append("Curricula: \(error.localizedDescription)")
+        }
+    }
+
+    /// Deletes all existing Song, Lesson, and Curriculum records before a fresh seed import.
     ///
     /// This ensures no duplicates accumulate when the seed content version
     /// is bumped and the full JSON is re-imported.
@@ -126,6 +187,16 @@ final class ContentImportManager {
             logger.info("Deleted \(lessons.count) existing lessons before re-import")
         } catch {
             logger.warning("Failed to fetch existing lessons for deletion: \(error)")
+        }
+
+        do {
+            let curricula = try context.fetch(FetchDescriptor<Curriculum>())
+            for curriculum in curricula {
+                context.delete(curriculum)
+            }
+            logger.info("Deleted \(curricula.count) existing curricula before re-import")
+        } catch {
+            logger.warning("Failed to fetch existing curricula for deletion: \(error)")
         }
     }
 
@@ -192,5 +263,21 @@ final class ContentImportManager {
         lesson.stepsData = try? JSONEncoder().encode(steps)
 
         return lesson
+    }
+
+    /// Maps a `CurriculumDTO` to a `Curriculum` @Model instance.
+    ///
+    /// Encodes the ordered lesson IDs as a JSON blob for CloudKit-compatible
+    /// storage in the `lessonIds` `Data?` field.
+    private static func mapCurriculumDTO(_ dto: CurriculumDTO) -> Curriculum {
+        let curriculum = Curriculum(
+            curriculumId: dto.curriculumId,
+            title: dto.title,
+            curriculumDescription: dto.curriculumDescription,
+            minDifficulty: dto.minDifficulty,
+            maxDifficulty: dto.maxDifficulty
+        )
+        curriculum.lessonIds = try? JSONEncoder().encode(dto.lessonIds)
+        return curriculum
     }
 }

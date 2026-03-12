@@ -23,6 +23,10 @@ struct LessonDetailView: View {
     @State
     private var progress: LessonProgress?
 
+    /// Progress manager for lesson step tracking and completion.
+    @State
+    private var progressManager: LessonProgressManager?
+
     // MARK: - Body
 
     var body: some View {
@@ -60,17 +64,18 @@ struct LessonDetailView: View {
         .navigationTitle(lesson.title)
         .navigationBarTitleDisplayMode(.large)
         .fullScreenCover(isPresented: $isStepViewPresented) {
-            if let steps = lesson.decodedSteps, !steps.isEmpty {
+            if let manager = progressManager {
                 LessonStepView(
                     lesson: lesson,
-                    steps: steps,
+                    progressManager: manager,
                     onComplete: {
-                        markLessonCompleted()
+                        fetchProgress()
                     }
                 )
             }
         }
         .task {
+            progressManager = LessonProgressManager(modelContext: modelContext)
             fetchProgress()
         }
     }
