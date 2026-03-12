@@ -16,6 +16,13 @@ let package = Package(
         .package(url: "https://github.com/AudioKit/Microtonality", branch: "main")
     ],
     targets: [
+        // ObjC helper that catches NSExceptions from AVAudioUnitSampler
+        // and converts them to NSError for Swift interop.
+        .target(
+            name: "ObjCExceptionCatcher",
+            path: "Sources/ObjCExceptionCatcher",
+            publicHeadersPath: "include"
+        ),
         .target(
             name: "SVAudio",
             dependencies: [
@@ -23,6 +30,7 @@ let package = Package(
                 .product(name: "AudioKit", package: "AudioKit"),
                 .product(name: "SoundpipeAudioKit", package: "SoundpipeAudioKit"),
                 .product(name: "Microtonality", package: "Microtonality"),
+                "ObjCExceptionCatcher",
             ],
             resources: [.process("Resources")]
         ),

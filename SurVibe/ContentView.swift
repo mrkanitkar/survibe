@@ -1,10 +1,13 @@
 import SVCore
 import SwiftUI
 
-/// Root content view with 5-tab navigation.
+/// Root content view with 5-tab navigation and onboarding flow.
 ///
 /// Each tab maintains its own NavigationStack internally.
 /// The AppRouter provides programmatic tab switching and navigation.
+///
+/// On first launch, presents `OnboardingContainerView` as a full-screen cover.
+/// After onboarding completes, shows `PostOnboardingWelcomeView` as a sheet.
 struct ContentView: View {
     // MARK: - Properties
 
@@ -12,6 +15,14 @@ struct ContentView: View {
     private var selectedTab: AppTab = .home
     @State
     private var router = AppRouter()
+
+    @Environment(OnboardingManager.self) private var onboardingManager
+
+    /// Controls the post-onboarding welcome sheet.
+    @State private var showPostOnboarding = false
+
+    /// Guards against showing post-onboarding more than once per session.
+    @State private var hasShownPostOnboarding = false
 
     // MARK: - Body
 
@@ -50,9 +61,48 @@ struct ContentView: View {
             router.switchTab(to: newTab)
             AnalyticsManager.shared.track(.tabSelected, properties: ["tab": newTab.label])
         }
+        .onChange(of: router.currentTab) { _, newTab in
+            // Sync programmatic tab changes (e.g. from PostOnboardingWelcomeView)
+            // back to the TabView selection binding.
+            if selectedTab != newTab {
+                selectedTab = newTab
+            }
+        }
+        .fullScreenCover(isPresented: showOnboarding, onDismiss: {
+            // Show post-onboarding welcome after the fullScreenCover is fully dismissed.
+            // Using onDismiss avoids race conditions from presenting a sheet while
+            // the fullScreenCover dismiss animation is still in progress.
+            if onboardingManager.isOnboardingComplete, !hasShownPostOnboarding {
+                hasShownPostOnboarding = true
+                showPostOnboarding = true
+            }
+        }) {
+            OnboardingContainerView()
+                .environment(onboardingManager)
+        }
+        .sheet(isPresented: $showPostOnboarding) {
+            PostOnboardingWelcomeView()
+                .environment(onboardingManager)
+                .environment(router)
+        }
+    }
+
+    // MARK: - Private Methods
+
+    /// Binding that presents the onboarding full-screen cover when onboarding is incomplete.
+    private var showOnboarding: Binding<Bool> {
+        Binding(
+            get: { !onboardingManager.isOnboardingComplete },
+            set: { newValue in
+                if !newValue {
+                    // Dismissed — onboarding was completed or skipped
+                }
+            }
+        )
     }
 }
 
 #Preview {
     ContentView()
+        .environment(OnboardingManager())
 }

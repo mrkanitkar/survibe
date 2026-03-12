@@ -54,6 +54,20 @@ public final class AudioSessionManager {
         try session.setActive(true)
     }
 
+    /// Configure audio session for playback only (no microphone input).
+    ///
+    /// Uses `.playback` category to avoid triggering a microphone permission prompt.
+    /// Suitable for SoundFont-based MIDI playback via AVAudioUnitSampler.
+    public func configureForPlayback() throws {
+        try session.setCategory(
+            .playback,
+            mode: .default,
+            options: [.mixWithOthers]
+        )
+        try session.setPreferredSampleRate(44100)
+        try session.setActive(true)
+    }
+
     /// Deactivate the audio session.
     /// Logs a warning on failure rather than silently swallowing the error.
     public func deactivate() {

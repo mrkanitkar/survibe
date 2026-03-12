@@ -1,7 +1,19 @@
 import AVFoundation
+import ObjCExceptionCatcher
+import os.log
 
 /// Manages SoundFont instrument loading and MIDI note playback
 /// via AVAudioUnitSampler connected to AudioEngineManager's engine.
+///
+/// Uses the bundled UprightPianoKW.sf2 — a real multi-sampled piano
+/// (27 sample zones, 2 velocity layers) from the FreePats project,
+/// released under CC0 (public domain).
+///
+/// ## ObjC Exception Safety
+/// `AVAudioUnitSampler.loadSoundBankInstrument` can raise ObjC
+/// exceptions (not Swift errors) on malformed SF2 files. This class
+/// uses `SVAudioTryObjC` to catch those exceptions and convert them
+/// to Swift `Error` values, preventing app crashes.
 @MainActor
 public final class SoundFontManager {
     // MARK: - Properties
@@ -22,6 +34,11 @@ public final class SoundFontManager {
     /// all 128 MIDI values. Encoded as `UInt16(channel) << 8 | UInt16(note)`.
     private var activeNotes: Set<UInt16> = []
 
+    private static let logger = Logger(
+        subsystem: "com.survibe",
+        category: "SoundFontManager"
+    )
+
     // MARK: - Initialization
 
     private init() {}
@@ -29,24 +46,82 @@ public final class SoundFontManager {
     // MARK: - Public Methods
 
     /// Load a SoundFont bank instrument into the sampler.
+    ///
+    /// Wraps `AVAudioUnitSampler.loadSoundBankInstrument` with ObjC
+    /// exception safety. If the SF2 file is malformed, returns a Swift
+    /// `Error` instead of crashing the process.
+    ///
     /// - Parameters:
-    ///   - url: URL to the .sf2 SoundFont file
-    ///   - program: MIDI program number (default: 0 = Piano)
-    ///   - bankMSB: Bank MSB (default: kAUSampler_DefaultMelodicBankMSB)
-    ///   - bankLSB: Bank LSB (default: 0)
+    ///   - url: URL to the .sf2 SoundFont file.
+    ///   - program: MIDI program number (default: 0 = Piano).
+    ///   - bankMSB: Bank MSB (default: kAUSampler_DefaultMelodicBankMSB).
+    ///   - bankLSB: Bank LSB (default: 0).
+    /// - Throws: `SoundFontError.loadFailed` if the SF2 cannot be loaded.
     public func loadSoundFont(
         at url: URL,
         program: UInt8 = 0,
         bankMSB: UInt8 = UInt8(kAUSampler_DefaultMelodicBankMSB),
         bankLSB: UInt8 = 0
     ) throws {
-        try sampler.loadSoundBankInstrument(
-            at: url,
-            program: program,
-            bankMSB: bankMSB,
-            bankLSB: bankLSB
-        )
+        // Capture any Swift error thrown inside the ObjC try block.
+        var swiftError: (any Error)?
+
+        var objcError: NSError?
+        let success = SVAudioTryObjC({
+            do {
+                try self.sampler.loadSoundBankInstrument(
+                    at: url,
+                    program: program,
+                    bankMSB: bankMSB,
+                    bankLSB: bankLSB
+                )
+            } catch {
+                swiftError = error
+            }
+        }, &objcError)
+
+        if let swiftError {
+            throw swiftError
+        }
+
+        if !success {
+            let message = objcError?.localizedDescription ?? "Unknown SoundFont load failure"
+            Self.logger.error("SoundFont ObjC exception: \(message)")
+            throw SoundFontError.loadFailed(message)
+        }
+
         isLoaded = true
+    }
+
+    /// Load the bundled UprightPianoKW.sf2 SoundFont from SVAudio resources.
+    ///
+    /// Starts the audio engine for playback if not already running, then
+    /// loads the piano SoundFont. Safe to call multiple times — returns
+    /// immediately if already loaded.
+    ///
+    /// The bundled SoundFont is a real multi-sampled upright piano
+    /// (FreePats UprightPianoKW, CC0 public domain) with 27 sample zones
+    /// and 2 velocity layers for natural-sounding playback.
+    ///
+    /// - Throws: If the engine fails to start or the SoundFont fails to load.
+    public func loadBundledPiano() throws {
+        guard !isLoaded else { return }
+
+        // Start the audio engine in playback-only mode (no mic permission).
+        try AudioEngineManager.shared.startForPlayback()
+
+        guard let url = Bundle.module.url(
+            forResource: "UprightPianoKW",
+            withExtension: "sf2"
+        ) else {
+            Self.logger.error("UprightPianoKW.sf2 not found in SVAudio bundle")
+            throw SoundFontError.loadFailed(
+                "Piano SoundFont not found in app bundle"
+            )
+        }
+
+        try loadSoundFont(at: url)
+        Self.logger.info("Bundled piano SoundFont loaded (UprightPianoKW)")
     }
 
     /// Play a MIDI note with given velocity on the sampler.
@@ -91,5 +166,20 @@ public final class SoundFontManager {
         let note = UInt8(key & 0xFF)
         let channel = UInt8(key >> 8)
         return (note, channel)
+    }
+}
+
+// MARK: - SoundFontError
+
+/// Errors specific to SoundFont loading operations.
+public enum SoundFontError: LocalizedError, Sendable {
+    /// The SoundFont file failed to load into the sampler.
+    case loadFailed(String)
+
+    public var errorDescription: String? {
+        switch self {
+        case .loadFailed(let reason):
+            "SoundFont load failed: \(reason)"
+        }
     }
 }

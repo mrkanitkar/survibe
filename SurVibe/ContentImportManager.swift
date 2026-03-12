@@ -54,6 +54,11 @@ final class ContentImportManager {
         var summary = ImportSummary()
         let context = ModelContext(container)
 
+        // Delete existing seed songs and lessons before re-importing.
+        // This prevents duplicates when the seed content version is bumped
+        // and the importer re-runs on an existing database.
+        deleteExistingSeedContent(from: context)
+
         // Import songs
         if let songsURL = bundle.url(forResource: "seed-songs", withExtension: "json") {
             do {
@@ -96,6 +101,32 @@ final class ContentImportManager {
         try context.save()
         logger.info("Seed content saved: \(summary.description)")
         return summary
+    }
+
+    /// Deletes all existing Song and Lesson records before a fresh seed import.
+    ///
+    /// This ensures no duplicates accumulate when the seed content version
+    /// is bumped and the full JSON is re-imported.
+    private static func deleteExistingSeedContent(from context: ModelContext) {
+        do {
+            let songs = try context.fetch(FetchDescriptor<Song>())
+            for song in songs {
+                context.delete(song)
+            }
+            logger.info("Deleted \(songs.count) existing songs before re-import")
+        } catch {
+            logger.warning("Failed to fetch existing songs for deletion: \(error)")
+        }
+
+        do {
+            let lessons = try context.fetch(FetchDescriptor<Lesson>())
+            for lesson in lessons {
+                context.delete(lesson)
+            }
+            logger.info("Deleted \(lessons.count) existing lessons before re-import")
+        } catch {
+            logger.warning("Failed to fetch existing lessons for deletion: \(error)")
+        }
     }
 
     // MARK: - DTO → @Model Mapping

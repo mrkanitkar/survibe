@@ -148,6 +148,9 @@ final class Song {
     /// Whether this song is available to free-tier users.
     var isFree: Bool = false
 
+    /// Whether the user has marked this song as a favorite.
+    var isFavorite: Bool = false
+
     /// Display order in the song library (ascending).
     var sortOrder: Int = 0
 

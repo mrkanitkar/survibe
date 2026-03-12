@@ -2,10 +2,12 @@ import Foundation
 import SwiftData
 import os.log
 
-/// Manages first-launch seed content loading into SwiftData.
+/// Manages seed content loading into SwiftData with version tracking.
 ///
-/// Uses a UserDefaults flag to ensure idempotent loading — seed content
-/// is imported only once, even if the app is restarted.
+/// Uses a UserDefaults integer version to detect when new seed content
+/// is available. When the stored version is lower than `currentContentVersion`,
+/// all seed content is re-imported (existing entries are upserted by slug ID
+/// via `ContentImportManager`).
 ///
 /// ## Usage
 /// Call from `SurVibeApp.init()` after ModelContainer is created:
@@ -15,41 +17,50 @@ import os.log
 @MainActor
 final class SeedContentLoader {
     private static let logger = Logger(subsystem: "com.survibe", category: "SeedContentLoader")
-    private static let seedContentLoadedKey = "com.survibe.seedContentLoaded"
+    private static let seedContentVersionKey = "com.survibe.seedContentVersion"
 
-    /// Whether seed content has already been loaded.
-    static var isSeedContentLoaded: Bool {
-        UserDefaults.standard.bool(forKey: seedContentLoadedKey)
+    /// Current seed content version.
+    /// Bump this whenever new songs or lessons are added to seed JSON files.
+    /// - v1: Initial 3 songs (Day 3)
+    /// - v2: +5 Hindi songs, +5 Marathi songs (Day 7/8)
+    /// - v3: +Jana Gana Mana, enhanced Morya Morya with MIDI playback data
+    private static let currentContentVersion = 3
+
+    /// The stored seed content version from UserDefaults.
+    static var storedContentVersion: Int {
+        UserDefaults.standard.integer(forKey: seedContentVersionKey)
     }
 
-    /// Loads seed content if not already loaded.
+    /// Loads seed content if not already at the current version.
     ///
-    /// Safe to call multiple times; idempotent via UserDefaults flag.
+    /// Safe to call multiple times; idempotent via version check.
     /// Runs synchronously on the main actor (called during app init).
     ///
     /// - Parameter container: SwiftData ModelContainer for inserts.
     static func loadSeedContentIfNeeded(into container: ModelContainer) {
-        guard !isSeedContentLoaded else {
-            logger.info("Seed content already loaded; skipping.")
+        guard storedContentVersion < currentContentVersion else {
+            logger.info("Seed content at version \(storedContentVersion); current is \(currentContentVersion). Skipping.")
             return
         }
 
+        logger.info("Seed content version \(storedContentVersion) < \(currentContentVersion). Importing.")
+
         do {
             let summary = try ContentImportManager.importAllSeedContent(into: container)
-            UserDefaults.standard.set(true, forKey: seedContentLoadedKey)
-            logger.info("Seed content loaded successfully: \(summary.description)")
+            UserDefaults.standard.set(currentContentVersion, forKey: seedContentVersionKey)
+            logger.info("Seed content loaded successfully (v\(currentContentVersion)): \(summary.description)")
         } catch {
             logger.error("Seed content loading failed: \(error). App will continue without seed data.")
         }
     }
 
-    /// Resets the seed content loaded flag (for testing/debug).
+    /// Resets the seed content version flag (for testing/debug).
     ///
     /// - Warning: Use only in debug builds or testing contexts.
     static func resetSeedContentFlag() {
         #if DEBUG
-            UserDefaults.standard.removeObject(forKey: seedContentLoadedKey)
-            logger.info("Seed content flag reset (DEBUG only)")
+            UserDefaults.standard.removeObject(forKey: seedContentVersionKey)
+            logger.info("Seed content version flag reset (DEBUG only)")
         #else
             logger.warning("resetSeedContentFlag called in non-DEBUG build; ignoring")
         #endif

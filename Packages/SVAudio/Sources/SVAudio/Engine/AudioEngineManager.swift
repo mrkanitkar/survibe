@@ -12,6 +12,24 @@ import os.log
 /// - Main mixer with per-node volume
 @MainActor
 public final class AudioEngineManager {
+
+    // MARK: - Engine Mode
+
+    /// Tracks the audio session category the engine was started with.
+    ///
+    /// When the engine is running in `.playbackOnly` mode and a caller
+    /// requests `.playAndRecord` (via `start()`), the engine must be
+    /// stopped and restarted so iOS configures the audio route for
+    /// microphone input.
+    private enum EngineMode {
+        /// Engine is not running.
+        case stopped
+        /// Engine running with `.playback` session — no mic input available.
+        case playbackOnly
+        /// Engine running with `.playAndRecord` session — mic input available.
+        case playAndRecord
+    }
+
     // MARK: - Properties
 
     public static let shared = AudioEngineManager()
@@ -33,6 +51,9 @@ public final class AudioEngineManager {
 
     private var isConfigured = false
     private var hasMicTap = false
+
+    /// Current engine mode — tracks which audio session category is active.
+    private var currentMode: EngineMode = .stopped
 
     /// Stored mic tap handler for reinstallation after route changes.
     private var micTapHandler: (@Sendable (AVAudioPCMBuffer, AVAudioTime) -> Void)?
@@ -88,6 +109,29 @@ public final class AudioEngineManager {
         )
     }
 
+    /// Wire up audio session interruption and route-change handlers.
+    ///
+    /// Extracted from `start()` and `startForPlayback()` to avoid duplication.
+    private func setupInterruptionAndRouteHandlers() {
+        AudioSessionManager.shared.onInterruptionBegan = { [weak self] in
+            Task { @MainActor in
+                self?.engine.pause()
+            }
+        }
+        AudioSessionManager.shared.onInterruptionEnded = { [weak self] shouldResume in
+            Task { @MainActor in
+                if shouldResume {
+                    try? self?.engine.start()
+                }
+            }
+        }
+        AudioSessionManager.shared.onRouteChange = { [weak self] in
+            Task { @MainActor in
+                self?.handleRouteChange()
+            }
+        }
+    }
+
     /// Handle an audio route change by reconnecting nodes with the new format.
     ///
     /// Pauses the engine, reconnects nodes, restarts the engine, and
@@ -136,17 +180,39 @@ public final class AudioEngineManager {
 
     // MARK: - Public Methods
 
-    /// Start the audio engine. Configures audio session first, then connects nodes.
+    /// Start the audio engine with microphone input. Configures audio session
+    /// with `.playAndRecord` category, then connects nodes and starts.
+    ///
+    /// If the engine is already running in playback-only mode (started via
+    /// `startForPlayback()`), it is stopped and restarted with the correct
+    /// audio session category so iOS configures the route for mic input.
     ///
     /// Important: Accesses `engine.inputNode` before `engine.start()` to ensure
     /// iOS configures the audio route for microphone input. Without this, the
     /// input node may report 0 channels when `installMicTap` is called later.
     public func start() throws {
-        Self.logger.info("start() called")
-        try AudioSessionManager.shared.configure()
-        Self.logger.info("Audio session configured")
+        // If already running in playAndRecord mode, nothing to do.
+        if currentMode == .playAndRecord {
+            Self.logger.info("start() called — already in playAndRecord mode, skipping")
+            return
+        }
 
-        // Connect nodes after session is configured so format is valid
+        // If running in playbackOnly mode, must stop engine first so iOS
+        // can reconfigure the audio route for microphone input.
+        if currentMode == .playbackOnly {
+            Self.logger.info("start() called — upgrading from playbackOnly to playAndRecord")
+            engine.pause()
+            engine.stop()
+            // Disconnect nodes so they can be reconnected with new format
+            isConfigured = false
+        } else {
+            Self.logger.info("start() called — engine was stopped")
+        }
+
+        try AudioSessionManager.shared.configure()
+        Self.logger.info("Audio session configured for playAndRecord")
+
+        // Reconnect nodes after session reconfiguration so format is valid
         if !isConfigured {
             connectNodes()
             Self.logger.info("Nodes connected")
@@ -160,30 +226,51 @@ public final class AudioEngineManager {
             "Input node format: rate=\(inputFormat.sampleRate) ch=\(inputFormat.channelCount)"
         )
 
-        // Set up interruption handling
-        AudioSessionManager.shared.onInterruptionBegan = { [weak self] in
-            Task { @MainActor in
-                self?.engine.pause()
-            }
-        }
-        AudioSessionManager.shared.onInterruptionEnded = { [weak self] shouldResume in
-            Task { @MainActor in
-                if shouldResume {
-                    try? self?.engine.start()
-                }
-            }
-        }
-
-        // Handle audio route changes (Bluetooth, headphones) by reconnecting nodes
-        AudioSessionManager.shared.onRouteChange = { [weak self] in
-            Task { @MainActor in
-                self?.handleRouteChange()
-            }
-        }
+        setupInterruptionAndRouteHandlers()
 
         engine.prepare()
         try engine.start()
-        Self.logger.info("Engine started, isRunning=\(self.engine.isRunning)")
+        currentMode = .playAndRecord
+        Self.logger.info("Engine started in playAndRecord mode, isRunning=\(self.engine.isRunning)")
+    }
+
+    /// Start the audio engine for playback only (no microphone input).
+    ///
+    /// Configures the audio session with `.playback` category and starts the
+    /// engine without accessing `inputNode`. This avoids triggering a microphone
+    /// permission prompt and is suitable for SoundFont-based MIDI playback.
+    ///
+    /// Safe to call multiple times — returns immediately if already running.
+    /// If the engine is already running in `.playAndRecord` mode, returns
+    /// immediately because that mode is a superset of playback.
+    public func startForPlayback() throws {
+        // playAndRecord is a superset — no downgrade needed.
+        if currentMode == .playAndRecord {
+            Self.logger.info("startForPlayback() — already in playAndRecord mode, skipping")
+            return
+        }
+
+        // Already running in playback mode — nothing to do.
+        if currentMode == .playbackOnly {
+            Self.logger.info("startForPlayback() — already in playbackOnly mode, skipping")
+            return
+        }
+
+        Self.logger.info("startForPlayback() called — engine was stopped")
+        try AudioSessionManager.shared.configureForPlayback()
+        Self.logger.info("Audio session configured for playback")
+
+        if !isConfigured {
+            connectNodes()
+            Self.logger.info("Nodes connected")
+        }
+
+        setupInterruptionAndRouteHandlers()
+
+        engine.prepare()
+        try engine.start()
+        currentMode = .playbackOnly
+        Self.logger.info("Engine started in playbackOnly mode, isRunning=\(self.engine.isRunning)")
     }
 
     /// Stop the audio engine and remove any installed taps.
@@ -200,6 +287,7 @@ public final class AudioEngineManager {
             engine.stop()
         }
         isConfigured = false
+        currentMode = .stopped
         AudioSessionManager.shared.deactivate()
     }
 

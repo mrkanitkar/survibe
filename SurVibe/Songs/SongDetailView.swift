@@ -37,18 +37,16 @@ struct SongDetailView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 24) {
+            VStack(spacing: 16) {
                 headerSection
-
-                metadataGrid
-
-                Divider()
 
                 playbackSection
 
+                notationSection
+
                 Divider()
 
-                notationSection
+                metadataGrid
             }
             .padding()
         }
@@ -64,18 +62,26 @@ struct SongDetailView: View {
 
     // MARK: - Private Views
 
-    /// Song title and artist header.
+    /// Song title, artist, and key metadata in a compact header.
     private var headerSection: some View {
-        VStack(spacing: 8) {
-            Text(song.title)
-                .font(.largeTitle)
-                .fontWeight(.bold)
-                .multilineTextAlignment(.center)
-                .accessibilityAddTraits(.isHeader)
-
+        VStack(spacing: 4) {
             Text(song.artist)
-                .font(.title3)
+                .font(.subheadline)
                 .foregroundStyle(.secondary)
+
+            HStack(spacing: 12) {
+                if !song.ragaName.isEmpty {
+                    Text(verbatim: "Raag \(song.ragaName)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Text(verbatim: "\(song.tempo) BPM")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(formattedDuration)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .combine)

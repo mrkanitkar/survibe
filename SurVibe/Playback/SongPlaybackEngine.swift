@@ -56,6 +56,12 @@ final class SongPlaybackEngine {
     /// Title of the currently loaded song (used for analytics).
     private(set) var songTitle: String = ""
 
+    /// Whether the loaded song has MIDI events available for audio playback.
+    /// Returns `false` for notation-only songs that lack binary MIDI data.
+    var hasPlayableContent: Bool {
+        !midiEvents.isEmpty
+    }
+
     // MARK: - Private Properties
 
     /// Wall-clock reference for computing elapsed playback time.
@@ -96,14 +102,32 @@ final class SongPlaybackEngine {
     /// or `.error` on failure.
     ///
     /// - Parameter song: The Song model whose `midiData` will be parsed.
-    ///   If `midiData` is nil or empty, transitions to `.error`.
+    ///   If `midiData` is nil or empty, stays in `.idle` (notation-only mode).
     func load(song: Song) async {
         playbackState = .loading
         songTitle = song.title
 
         Self.logger.info("Loading song: \(song.title)")
 
-        let result = MIDIParser.parse(data: song.midiData)
+        // Songs may not have MIDI binary data (seed songs use sargam/western
+        // notation arrays instead). Treat nil/empty MIDI as "no playback
+        // available" — stay idle so the notation is still viewable.
+        guard let midiData = song.midiData, !midiData.isEmpty else {
+            midiEvents = []
+            duration = TimeInterval(song.durationSeconds)
+            currentPosition = 0
+            currentNoteIndex = nil
+            nextNoteIndex = nil
+            pauseOffset = 0
+            playbackState = .idle
+
+            Self.logger.info(
+                "Song '\(song.title)' has no MIDI data — notation-only mode"
+            )
+            return
+        }
+
+        let result = MIDIParser.parse(data: midiData)
 
         switch result {
         case .success(let events):
@@ -117,6 +141,17 @@ final class SongPlaybackEngine {
             currentNoteIndex = nil
             nextNoteIndex = events.isEmpty ? nil : 0
             pauseOffset = 0
+
+            // Start the audio engine and load the bundled piano SoundFont
+            // so that playNote() calls actually produce sound.
+            do {
+                try SoundFontManager.shared.loadBundledPiano()
+            } catch {
+                Self.logger.error(
+                    "SoundFont load failed: \(error.localizedDescription)"
+                )
+            }
+
             playbackState = .idle
 
             Self.logger.info(

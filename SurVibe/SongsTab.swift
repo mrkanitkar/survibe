@@ -4,35 +4,25 @@ import SwiftUI
 
 /// Songs tab — browse and play the song library.
 ///
-/// Displays all songs from the SwiftData store sorted by display order.
-/// When the library is empty, shows a `ContentUnavailableView` placeholder.
-/// Tapping a song row navigates to `SongDetailView` for metadata
-/// inspection and playback.
+/// Wraps `SongLibraryView` in a NavigationStack and creates the
+/// `SongLibraryViewModel` with the current model context.
+/// Navigation to `SongDetailView` is handled via `.navigationDestination`.
 struct SongsTab: View {
     // MARK: - Properties
 
-    /// All songs from SwiftData, sorted by display order.
-    @Query(sort: \Song.sortOrder)
-    private var songs: [Song]
+    @Environment(\.modelContext) private var modelContext
+    @State private var viewModel: SongLibraryViewModel?
 
     // MARK: - Body
 
     var body: some View {
         NavigationStack {
             Group {
-                if songs.isEmpty {
-                    ContentUnavailableView(
-                        "No Songs Yet",
-                        systemImage: "music.note.list",
-                        description: Text("Songs will appear here once content is loaded.")
-                    )
+                if let viewModel {
+                    SongLibraryView()
+                        .environment(viewModel)
                 } else {
-                    List(songs) { song in
-                        NavigationLink(value: song) {
-                            SongListRow(song: song)
-                        }
-                    }
-                    .listStyle(.plain)
+                    ProgressView()
                 }
             }
             .navigationTitle("Songs")
@@ -41,6 +31,11 @@ struct SongsTab: View {
             }
         }
         .accessibilityLabel(AccessibilityHelper.tabLabel(for: "Songs"))
+        .onAppear {
+            if viewModel == nil {
+                viewModel = SongLibraryViewModel(modelContext: modelContext)
+            }
+        }
     }
 }
 

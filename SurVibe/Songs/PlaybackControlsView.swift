@@ -106,7 +106,7 @@ struct PlaybackControlsView: View {
         }
     }
 
-    /// Loading spinner or error message based on engine state.
+    /// Loading spinner, error message, or notation-only indicator based on engine state.
     @ViewBuilder
     private var stateIndicator: some View {
         switch engine.playbackState {
@@ -121,6 +121,12 @@ struct PlaybackControlsView: View {
                 .foregroundStyle(.red)
                 .multilineTextAlignment(.center)
                 .accessibilityLabel("Playback error: \(message)")
+
+        case .idle where !engine.hasPlayableContent:
+            Label("Notation only — no audio playback", systemImage: "music.note")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .accessibilityLabel("This song has notation only. Audio playback is not available.")
 
         default:
             EmptyView()
@@ -172,12 +178,15 @@ struct PlaybackControlsView: View {
     }
 
     /// Whether the play/pause button should be disabled.
+    ///
+    /// Disabled during loading, error states, and when the song has no
+    /// MIDI data (notation-only songs cannot be played back).
     private var isPlayPauseDisabled: Bool {
         switch engine.playbackState {
         case .loading, .error:
             true
         default:
-            false
+            !engine.hasPlayableContent
         }
     }
 

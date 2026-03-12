@@ -1,18 +1,26 @@
 import SVCore
 import SwiftUI
 
-/// Profile tab — user profile and app settings.
+/// Profile tab — user profile, authentication, and app settings.
+///
+/// Shows authentication state at the top (sign in button or user info),
+/// followed by settings (language, redo onboarding).
 struct ProfileTab: View {
     // MARK: - Properties
 
     @State private var languageManager = LanguageManager()
+    @Environment(AuthManager.self) private var authManager
+    @Environment(OnboardingManager.self) private var onboardingManager
+
+    /// Controls the sign-in prompt sheet.
+    @State private var signInTrigger: SignInTrigger?
 
     // MARK: - Body
 
     var body: some View {
         NavigationStack {
             List {
-                profileSection
+                authSection
                 settingsSection
             }
             .navigationTitle("Profile")
@@ -21,32 +29,92 @@ struct ProfileTab: View {
                     LanguageSelectorView()
                 }
             }
+            .sheet(item: $signInTrigger) { trigger in
+                SignInPromptView(trigger: trigger)
+            }
         }
         .accessibilityLabel(AccessibilityHelper.tabLabel(for: "Profile"))
     }
 
     // MARK: - Sections
 
-    private var profileSection: some View {
+    /// Authentication section — shows user info when signed in, or sign-in button when anonymous.
+    private var authSection: some View {
         Section {
-            HStack(spacing: 16) {
-                Image(systemName: "person.crop.circle.fill")
-                    .font(.system(size: 48))
-                    .foregroundStyle(.secondary)
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Profile")
-                        .font(.title2)
-                        .fontWeight(.semibold)
-                    Text("User profile coming in Sprint 1")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+            if authManager.isAuthenticated {
+                // Signed-in state
+                HStack(spacing: 16) {
+                    Image(systemName: "person.crop.circle.badge.checkmark")
+                        .font(.system(size: 44))
+                        .foregroundStyle(Color.accentColor)
+                        .accessibilityHidden(true)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        if let user = authManager.currentUser {
+                            if !user.displayName.isEmpty {
+                                Text(verbatim: user.displayName)
+                                    .font(.title3)
+                                    .fontWeight(.semibold)
+                            } else {
+                                Text("SurVibe User")
+                                    .font(.title3)
+                                    .fontWeight(.semibold)
+                            }
+
+                            if let email = user.email {
+                                Text(verbatim: email)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+
+                        Text("Signed in with Apple")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
                 }
+                .padding(.vertical, 8)
+
+                // Sign Out button
+                Button(role: .destructive) {
+                    authManager.signOut()
+                } label: {
+                    Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.forward")
+                }
+                .accessibilityLabel(Text("Sign Out"))
+                .accessibilityHint(Text("Double tap to sign out of your Apple ID"))
+            } else {
+                // Anonymous state
+                HStack(spacing: 16) {
+                    Image(systemName: "person.crop.circle.fill")
+                        .font(.system(size: 44))
+                        .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Not Signed In")
+                            .font(.title3)
+                            .fontWeight(.semibold)
+                        Text("Sign in to sync progress and access premium content")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.vertical, 8)
+
+                // Sign In button
+                Button {
+                    signInTrigger = .profile
+                } label: {
+                    Label("Sign in with Apple", systemImage: "apple.logo")
+                }
+                .accessibilityLabel(Text("Sign in with Apple"))
+                .accessibilityHint(Text("Double tap to sign in with your Apple ID"))
             }
-            .padding(.vertical, 8)
         }
     }
 
+    /// Settings section — language selector and redo onboarding.
     private var settingsSection: some View {
         Section(header: Text("Settings")) {
             NavigationLink(value: "languages") {
@@ -61,10 +129,21 @@ struct ProfileTab: View {
             .accessibilityHint(
                 Text("Current language: \(languageManager.currentLanguageDisplayName). Double tap to change.")
             )
+
+            // Redo Onboarding
+            Button {
+                onboardingManager.resetOnboarding()
+            } label: {
+                Label("Redo Onboarding", systemImage: "arrow.counterclockwise")
+            }
+            .accessibilityLabel(Text("Redo Onboarding"))
+            .accessibilityHint(Text("Double tap to restart the onboarding flow and reconfigure your preferences"))
         }
     }
 }
 
 #Preview {
     ProfileTab()
+        .environment(AuthManager.shared)
+        .environment(OnboardingManager())
 }

@@ -14,6 +14,13 @@ final class UserProfile {
     var createdAt: Date = Date()
     var lastActiveAt: Date = Date()
 
+    /// Whether this user has not yet signed in with Apple.
+    var isAnonymous: Bool = true
+
+    /// The Apple ID user identifier from Sign in with Apple.
+    /// Empty string when anonymous (CloudKit requires non-optional).
+    var appleUserIdentifier: String = ""
+
     /// Profile image data (stored as Transformable blob in CloudKit).
     @Attribute(.externalStorage) var profileImageData: Data?
 

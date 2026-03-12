@@ -55,7 +55,7 @@ struct SurVibeApp: App {
             // old persistent store BEFORE creating the container. This prevents
             // SIGABRT crashes inside Core Data/CloudKit when encountering an
             // incompatible schema (versioned-schema migration is banned per CloudKit rules).
-            let currentSchemaVersion = 2  // v2: Added Song, Lesson, Curriculum (Day 2)
+            let currentSchemaVersion = 3  // v3: Added isFavorite, isAnonymous, appleUserIdentifier (Day 7/8)
             let previousSchemaVersion = UserDefaults.standard.integer(forKey: "survibe_schema_version")
             if previousSchemaVersion != 0, previousSchemaVersion < currentSchemaVersion {
                 appLogger.info(
@@ -154,11 +154,18 @@ struct SurVibeApp: App {
         }
     }
 
+    // MARK: - State
+
+    /// Onboarding manager injected into the view hierarchy.
+    @State private var onboardingManager = OnboardingManager()
+
     // MARK: - Body
 
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environment(onboardingManager)
+                .environment(AuthManager.shared)
         }
         .modelContainer(modelContainer)
     }
