@@ -328,11 +328,14 @@ final class PracticeSessionViewModel {
         let durationMinutes = max(1, Int(elapsedPracticeTime / 60.0))
 
         // Persist results
-        recorder?.recordSession(
+        let songInfo = SessionSongInfo(
             songId: song?.slugId ?? "",
             songTitle: song?.title ?? "",
             ragaName: song?.ragaName ?? "",
-            difficulty: song?.difficulty ?? 1,
+            difficulty: song?.difficulty ?? 1
+        )
+        recorder?.recordSession(
+            songInfo: songInfo,
             durationMinutes: durationMinutes,
             noteScores: noteScores
         )
@@ -440,79 +443,38 @@ final class PracticeSessionViewModel {
         pitchMonitoringTask?.cancel()
         pitchMonitoringTask = Task { [weak self] in
             guard let self else { return }
-
             for await pitch in self.audioProcessor.pitchStream {
-                guard !Task.isCancelled else { break }
-                guard self.phase == .practiceAlong else { break }
-                guard self.currentPracticeNoteIndex < self.sargamNotes.count
-                else {
-                    // All notes played — auto-complete
+                guard !Task.isCancelled, self.phase == .practiceAlong else { break }
+                guard self.currentPracticeNoteIndex < self.sargamNotes.count else {
                     self.completePractice()
                     break
                 }
-
-                // Update current pitch for UI
                 self.currentPitch = pitch
-
-                // Skip if below thresholds
-                guard
-                    pitch.amplitude >= PracticeConstants.silenceThreshold,
-                    pitch.confidence >= PracticeConstants.confidenceThreshold
-                else {
-                    continue
-                }
-
-                // Get the expected note
-                let expectedNote =
-                    self.sargamNotes[self.currentPracticeNoteIndex]
-
-                // Build the full expected note name (with modifier)
-                let expectedNoteName: String
-                if let modifier = expectedNote.modifier {
-                    expectedNoteName =
-                        "\(modifier.capitalized) \(expectedNote.note)"
-                } else {
-                    expectedNoteName = expectedNote.note
-                }
-
-                // Calculate pitch deviation in cents
-                let pitchDeviation = abs(pitch.centsOffset)
-
-                // Timing deviation: how far from expected onset.
-                // In this streaming model we do not have exact onset timing,
-                // so we use a small default value.
-                let timingDeviation = 0.05
-
-                // Duration deviation: we accept any duration for now
-                let durationDeviation = 0.1
-
-                // Score this note
-                let score = NoteScoreCalculator.score(
-                    expectedNote: expectedNoteName,
-                    detectedNote: pitch.noteName,
-                    pitchDeviationCents: pitchDeviation,
-                    timingDeviationSeconds: timingDeviation,
-                    durationDeviation: durationDeviation
-                )
-
-                self.noteScores.append(score)
-
-                // Check if the detected note matches the expected note
-                let noteMatches = pitch.noteName == expectedNote.note
-                let octaveMatches = pitch.octave == expectedNote.octave
-
-                if noteMatches && octaveMatches {
-                    // Advance to next note
-                    self.currentPracticeNoteIndex += 1
-
-                    if self.currentPracticeNoteIndex
-                        >= self.sargamNotes.count
-                    {
-                        self.completePractice()
-                        break
-                    }
-                }
+                guard pitch.amplitude >= PracticeConstants.silenceThreshold,
+                      pitch.confidence >= PracticeConstants.confidenceThreshold
+                else { continue }
+                if self.processDetectedPitch(pitch) { break }
             }
         }
+    }
+
+    /// Score a detected pitch against the current expected note. Returns `true` if session is complete.
+    private func processDetectedPitch(_ pitch: PitchResult) -> Bool {
+        let expected = sargamNotes[currentPracticeNoteIndex]
+        let expectedName = expected.modifier.map { "\($0.capitalized) \(expected.note)" } ?? expected.note
+        let score = NoteScoreCalculator.score(
+            expectedNote: expectedName, detectedNote: pitch.noteName,
+            pitchDeviationCents: abs(pitch.centsOffset),
+            timingDeviationSeconds: 0.05, durationDeviation: 0.1
+        )
+        noteScores.append(score)
+        if pitch.noteName == expected.note && pitch.octave == expected.octave {
+            currentPracticeNoteIndex += 1
+            if currentPracticeNoteIndex >= sargamNotes.count {
+                completePractice()
+                return true
+            }
+        }
+        return false
     }
 }

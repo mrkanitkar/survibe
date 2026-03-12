@@ -21,8 +21,28 @@ struct SurVibeApp: App {
     // MARK: - Initialization
 
     init() {
-        // Configure ModelContainer with CloudKit automatic database
-        let schema = Schema([
+        let schema = Self.appSchema
+        let isTestHost = ProcessInfo.processInfo.environment["XCTestBundlePath"] != nil
+
+        if isTestHost {
+            modelContainer = Self.createTestContainer(schema: schema)
+        } else {
+            modelContainer = Self.createProductionContainer(schema: schema)
+        }
+
+        Self.configureAnalytics()
+        CrashReportingManager.shared.activate()
+
+        if !isTestHost {
+            SeedContentLoader.loadSeedContentIfNeeded(into: modelContainer)
+        }
+    }
+
+    // MARK: - Schema
+
+    /// SwiftData schema with all app models.
+    private static var appSchema: Schema {
+        Schema([
             UserProfile.self,
             RiyazEntry.self,
             Achievement.self,
@@ -33,70 +53,72 @@ struct SurVibeApp: App {
             Lesson.self,
             Curriculum.self,
         ])
+    }
+
+    // MARK: - Container Factory
+
+    /// Create an in-memory container for test hosts.
+    private static func createTestContainer(schema: Schema) -> ModelContainer {
+        do {
+            let testConfig = ModelConfiguration(isStoredInMemoryOnly: true)
+            return try ModelContainer(for: schema, configurations: [testConfig])
+        } catch {
+            fatalError("Test ModelContainer failed: \(error)")
+        }
+    }
+
+    /// Create the production container with CloudKit sync and schema migration.
+    private static func createProductionContainer(schema: Schema) -> ModelContainer {
         let appLogger = Logger(subsystem: "com.survibe", category: "App")
-        let isTestHost = ProcessInfo.processInfo.environment["XCTestBundlePath"] != nil
+        let config = ModelConfiguration(schema: schema, cloudKitDatabase: .automatic)
 
-        if isTestHost {
-            // Test host: use in-memory store, no CloudKit.
-            // Tests must not depend on persistent storage or CloudKit entitlements.
-            do {
-                let testConfig = ModelConfiguration(isStoredInMemoryOnly: true)
-                modelContainer = try ModelContainer(for: schema, configurations: [testConfig])
-            } catch {
-                fatalError("Test ModelContainer failed: \(error)")
-            }
-        } else {
-            let modelConfiguration = ModelConfiguration(
-                schema: schema,
-                cloudKitDatabase: .automatic
+        // Proactive store reset on schema version change
+        let currentSchemaVersion = 3
+        let previousVersion = UserDefaults.standard.integer(forKey: "survibe_schema_version")
+        if previousVersion != 0, previousVersion < currentSchemaVersion {
+            appLogger.info(
+                "Schema version changed (\(previousVersion) → \(currentSchemaVersion)). Resetting store."
             )
+            deleteSwiftDataStore()
+        }
+        UserDefaults.standard.set(currentSchemaVersion, forKey: "survibe_schema_version")
 
-            // Proactive store reset: if the schema version has changed, delete the
-            // old persistent store BEFORE creating the container. This prevents
-            // SIGABRT crashes inside Core Data/CloudKit when encountering an
-            // incompatible schema (versioned-schema migration is banned per CloudKit rules).
-            let currentSchemaVersion = 3  // v3: Added isFavorite, isAnonymous, appleUserIdentifier (Day 7/8)
-            let previousSchemaVersion = UserDefaults.standard.integer(forKey: "survibe_schema_version")
-            if previousSchemaVersion != 0, previousSchemaVersion < currentSchemaVersion {
-                appLogger.info(
-                    "Schema version changed (\(previousSchemaVersion) → \(currentSchemaVersion)). Resetting store."
-                )
-                Self.deleteSwiftDataStore()
-            }
-            UserDefaults.standard.set(currentSchemaVersion, forKey: "survibe_schema_version")
+        do {
+            return try ModelContainer(for: schema, configurations: [config])
+        } catch {
+            appLogger.error(
+                "ModelContainer creation failed: \(error.localizedDescription). Attempting store reset."
+            )
+            deleteSwiftDataStore()
+            return retryOrFallback(schema: schema, config: config, logger: appLogger)
+        }
+    }
 
+    /// Retry container creation after store deletion, falling back to in-memory.
+    private static func retryOrFallback(
+        schema: Schema,
+        config: ModelConfiguration,
+        logger: Logger
+    ) -> ModelContainer {
+        do {
+            let container = try ModelContainer(for: schema, configurations: [config])
+            logger.info("ModelContainer created after store reset.")
+            return container
+        } catch {
+            logger.error(
+                "Retry failed: \(error.localizedDescription). Falling back to in-memory store."
+            )
             do {
-                modelContainer = try ModelContainer(
-                    for: schema,
-                    configurations: [modelConfiguration]
-                )
+                let fallback = ModelConfiguration(isStoredInMemoryOnly: true)
+                return try ModelContainer(for: schema, configurations: [fallback])
             } catch {
-                appLogger.error(
-                    "ModelContainer creation failed: \(error.localizedDescription). Attempting store reset."
-                )
-                Self.deleteSwiftDataStore()
-
-                do {
-                    modelContainer = try ModelContainer(
-                        for: schema,
-                        configurations: [modelConfiguration]
-                    )
-                    appLogger.info("ModelContainer created after store reset.")
-                } catch {
-                    appLogger.error(
-                        "Retry failed: \(error.localizedDescription). Falling back to in-memory store."
-                    )
-                    do {
-                        let fallback = ModelConfiguration(isStoredInMemoryOnly: true)
-                        modelContainer = try ModelContainer(for: schema, configurations: [fallback])
-                    } catch {
-                        fatalError("Failed to create even in-memory ModelContainer: \(error)")
-                    }
-                }
+                fatalError("Failed to create even in-memory ModelContainer: \(error)")
             }
         }
+    }
 
-        // Initialize analytics — API key sourced from Info.plist (set via xcconfig)
+    /// Configure PostHog analytics from Info.plist API key.
+    private static func configureAnalytics() {
         let apiKey = Bundle.main.object(forInfoDictionaryKey: "POSTHOG_API_KEY") as? String ?? ""
         #if DEBUG
         if apiKey.isEmpty || apiKey.contains("PLACEHOLDER") {
@@ -108,15 +130,6 @@ struct SurVibeApp: App {
             AnalyticsManager.shared.configure(apiKey: apiKey)
         }
         AnalyticsManager.shared.track(.appScaffoldingLoaded)
-
-        // Activate MetricKit crash reporting and diagnostics
-        CrashReportingManager.shared.activate()
-
-        // Load seed content on first launch (idempotent).
-        // Skip in test host — tests create their own containers and seed data.
-        if !isTestHost {
-            SeedContentLoader.loadSeedContentIfNeeded(into: modelContainer)
-        }
     }
 
     // MARK: - Store Management

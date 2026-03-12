@@ -188,317 +188,186 @@ struct PracticeTab: View {
         }
         .background(.ultraThinMaterial)
     }
+}
 
-    // MARK: - Active Note Label
+// MARK: - Sub-Views & Helpers
 
+private extension PracticeTab {
     /// Compact note label showing Western name, octave, and Swar name.
-    /// The keyboard itself provides the primary visual feedback.
-    private func activeNoteLabel(_ result: PitchResult) -> some View {
+    func activeNoteLabel(_ result: PitchResult) -> some View {
         HStack(spacing: Spacing.sm) {
             Text("\(viewModel.westernNoteName)\(result.octave)")
-                .font(.title)
-                .fontWeight(.bold)
-                .fontDesign(.rounded)
+                .font(.title).fontWeight(.bold).fontDesign(.rounded)
                 .foregroundStyle(centsColor(result.centsOffset))
                 .contentTransition(.numericText())
-
-            Text("—")
-                .font(.title2)
-                .foregroundStyle(.tertiary)
-
-            Text(result.noteName)
-                .font(.title2)
-                .foregroundStyle(.secondary)
+            Text("—").font(.title2).foregroundStyle(.tertiary)
+            Text(result.noteName).font(.title2).foregroundStyle(.secondary)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
             "\(viewModel.westernNoteName) \(result.octave), \(AccessibilityHelper.swarLabel(for: result.noteName))"
         )
-        .accessibilityValue(
-            AccessibilityHelper.pitchAccuracyLabel(
-                centsOffset: result.centsOffset
-            )
-        )
+        .accessibilityValue(AccessibilityHelper.pitchAccuracyLabel(centsOffset: result.centsOffset))
     }
 
-    // MARK: - Cents Indicator (Tuner Bar)
-
     /// Visual tuner-style indicator showing how sharp or flat the note is.
-    private func centsIndicator(_ cents: Double) -> some View {
+    func centsIndicator(_ cents: Double) -> some View {
         VStack(spacing: Spacing.xs) {
             GeometryReader { geo in
                 let width = geo.size.width
                 let center = width / 2
                 let clampedCents = max(-50, min(50, cents))
                 let offset = (clampedCents / 50.0) * (width / 2) * 0.9
-
                 ZStack {
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(.quaternary)
-                        .frame(height: 8)
-
-                    Rectangle()
-                        .fill(.secondary)
-                        .frame(width: 2, height: 16)
-                        .position(x: center, y: 8)
-
-                    Circle()
-                        .fill(centsColor(cents))
-                        .frame(width: 16, height: 16)
+                    RoundedRectangle(cornerRadius: 4).fill(.quaternary).frame(height: 8)
+                    Rectangle().fill(.secondary).frame(width: 2, height: 16).position(x: center, y: 8)
+                    Circle().fill(centsColor(cents)).frame(width: 16, height: 16)
                         .position(x: center + offset, y: 8)
                 }
             }
             .frame(height: 20)
-
             HStack {
-                Text("Flat")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                Text("Flat").font(.caption2).foregroundStyle(.secondary)
                 Spacer()
-                Text(centsText(cents))
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .foregroundStyle(centsColor(cents))
+                Text(centsText(cents)).font(.caption).fontWeight(.medium).foregroundStyle(centsColor(cents))
                 Spacer()
-                Text("Sharp")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                Text("Sharp").font(.caption2).foregroundStyle(.secondary)
             }
         }
         .padding(.horizontal, Spacing.lg)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(
-            AccessibilityHelper.pitchAccuracyLabel(centsOffset: cents)
-        )
+        .accessibilityLabel(AccessibilityHelper.pitchAccuracyLabel(centsOffset: cents))
     }
 
-    // MARK: - Frequency Display
-
     /// Shows frequency and confidence values.
-    private func frequencyDisplay(_ result: PitchResult) -> some View {
+    func frequencyDisplay(_ result: PitchResult) -> some View {
         HStack(spacing: Spacing.xl) {
-            statItem(
-                value: String(format: "%.1f Hz", result.frequency),
-                label: "Frequency",
-                voiceOver: "Frequency \(Int(result.frequency)) hertz"
-            )
-            statItem(
-                value: "\(Int(result.confidence * 100))%",
-                label: "Confidence",
-                voiceOver: "Confidence \(Int(result.confidence * 100)) percent"
-            )
-            statItem(
-                value: String(format: "%.3f", result.amplitude),
-                label: "Amplitude",
-                voiceOver: "Amplitude \(Int(result.amplitude * 100)) percent"
-            )
+            statItem(value: String(format: "%.1f Hz", result.frequency),
+                     label: "Frequency", voiceOver: "Frequency \(Int(result.frequency)) hertz")
+            statItem(value: "\(Int(result.confidence * 100))%",
+                     label: "Confidence", voiceOver: "Confidence \(Int(result.confidence * 100)) percent")
+            statItem(value: String(format: "%.3f", result.amplitude),
+                     label: "Amplitude", voiceOver: "Amplitude \(Int(result.amplitude * 100)) percent")
         }
     }
 
     /// A single stat item with monospaced value and label.
-    private func statItem(
-        value: String,
-        label: String,
-        voiceOver: String
-    ) -> some View {
+    func statItem(value: String, label: String, voiceOver: String) -> some View {
         VStack(spacing: 2) {
-            Text(value)
-                .font(.caption)
-                .monospacedDigit()
-            Text(label)
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
+            Text(value).font(.caption).monospacedDigit()
+            Text(label).font(.caption2).foregroundStyle(.tertiary)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(voiceOver)
     }
 
-    // MARK: - Note History
-
     /// Rolling list of recently detected notes.
-    private var noteHistory: some View {
+    var noteHistory: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
-            Text("Recent Notes")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
+            Text("Recent Notes").font(.caption).foregroundStyle(.secondary)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: Spacing.sm) {
                     ForEach(viewModel.recentNotes.reversed()) { note in
                         VStack(spacing: 2) {
-                            Text(verbatim: note.westernName)
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                            Text(verbatim: note.swarName)
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
+                            Text(verbatim: note.westernName).font(.headline).fontWeight(.semibold)
+                            Text(verbatim: note.swarName).font(.caption2).foregroundStyle(.secondary)
                         }
                         .frame(width: 44, height: 44)
                         .background(
                             RoundedRectangle(cornerRadius: CornerRadius.sm)
-                                .fill(
-                                    centsColor(note.centsOffset).opacity(0.15)
-                                )
+                                .fill(centsColor(note.centsOffset).opacity(0.15))
                         )
-                        .accessibilityLabel(
-                            "\(note.westernName), \(note.swarName)"
-                        )
+                        .accessibilityLabel("\(note.westernName), \(note.swarName)")
                     }
                 }
             }
         }
     }
 
-    // MARK: - Placeholder Views
-
     /// Shown while listening but no note detected yet.
-    private var listeningPlaceholder: some View {
+    var listeningPlaceholder: some View {
         VStack(spacing: Spacing.md) {
-            Image(systemName: "waveform")
-                .font(.system(size: 48))
-                .foregroundStyle(.secondary)
-                .symbolEffect(.variableColor.iterative)
+            Image(systemName: "waveform").font(.system(size: 48))
+                .foregroundStyle(.secondary).symbolEffect(.variableColor.iterative)
                 .accessibilityHidden(true)
-            Text("Listening...")
-                .font(.title3)
-                .foregroundStyle(.secondary)
-            Text("Play a note on your piano")
-                .font(.subheadline)
-                .foregroundStyle(.tertiary)
+            Text("Listening...").font(.title3).foregroundStyle(.secondary)
+            Text("Play a note on your piano").font(.subheadline).foregroundStyle(.tertiary)
         }
     }
 
     /// Shown when the detector is idle.
-    private var idlePlaceholder: some View {
+    var idlePlaceholder: some View {
         VStack(spacing: Spacing.md) {
-            Image(systemName: "pianokeys")
-                .font(.system(size: 60))
-                .foregroundStyle(.secondary)
-                .accessibilityHidden(true)
-            Text("Pitch Detection Demo")
-                .font(.title2)
-                .fontWeight(.semibold)
+            Image(systemName: "pianokeys").font(.system(size: 60))
+                .foregroundStyle(.secondary).accessibilityHidden(true)
+            Text("Pitch Detection Demo").font(.title2).fontWeight(.semibold)
             Text("Tap the mic button to start detecting notes")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-
+                .font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
             VStack(alignment: .leading, spacing: Spacing.xs) {
-                Label(
-                    "Play C D E F G A B on your piano",
-                    systemImage: "music.note"
-                )
+                Label("Play C D E F G A B on your piano", systemImage: "music.note")
                 Label("Hold each note for ~1 second", systemImage: "timer")
-                Label(
-                    "See both Western and Swar names",
-                    systemImage: "character.textbox"
-                )
+                Label("See both Western and Swar names", systemImage: "character.textbox")
             }
-            .font(.callout)
-            .foregroundStyle(.secondary)
-            .padding(.top, Spacing.sm)
+            .font(.callout).foregroundStyle(.secondary).padding(.top, Spacing.sm)
         }
     }
-
-    // MARK: - Mic Denied View
 
     /// Shown when microphone permission is denied.
-    private var micDeniedView: some View {
+    var micDeniedView: some View {
         VStack(spacing: Spacing.md) {
-            Image(systemName: "mic.slash")
-                .font(.system(size: 48))
-                .foregroundStyle(.secondary)
-                .accessibilityHidden(true)
-            Text("Microphone Access Needed")
-                .font(.title3)
-                .fontWeight(.semibold)
+            Image(systemName: "mic.slash").font(.system(size: 48))
+                .foregroundStyle(.secondary).accessibilityHidden(true)
+            Text("Microphone Access Needed").font(.title3).fontWeight(.semibold)
             Text("SurVibe needs microphone access to detect the notes you play.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+                .font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
             Button("Open Settings") {
-                if let url = viewModel.settingsURL {
-                    openURL(url)
-                }
+                if let url = viewModel.settingsURL { openURL(url) }
             }
             .buttonStyle(.borderedProminent)
-            .accessibilityHint(
-                "Opens iOS Settings to enable microphone access"
-            )
+            .accessibilityHint("Opens iOS Settings to enable microphone access")
         }
-        .padding(Spacing.lg)
-        .frame(maxHeight: .infinity)
+        .padding(Spacing.lg).frame(maxHeight: .infinity)
     }
-
-    // MARK: - Error View
 
     /// Shown when an error occurs.
-    private func errorView(_ message: String) -> some View {
+    func errorView(_ message: String) -> some View {
         VStack(spacing: Spacing.md) {
-            Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 48))
-                .foregroundStyle(.orange)
-                .accessibilityHidden(true)
-            Text(message)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-            Button("Try Again") {
-                Task { await viewModel.startListening() }
-            }
-            .buttonStyle(.borderedProminent)
+            Image(systemName: "exclamationmark.triangle").font(.system(size: 48))
+                .foregroundStyle(.orange).accessibilityHidden(true)
+            Text(message).font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
+            Button("Try Again") { Task { await viewModel.startListening() } }
+                .buttonStyle(.borderedProminent)
         }
-        .padding(Spacing.lg)
-        .frame(maxHeight: .infinity)
+        .padding(Spacing.lg).frame(maxHeight: .infinity)
     }
 
-    // MARK: - Chord Name Display
-
     /// Large chord name with sargam subtitle when a chord is detected.
-    private func chordNameDisplay(_ name: String) -> some View {
+    func chordNameDisplay(_ name: String) -> some View {
         VStack(spacing: Spacing.xs) {
-            Text(name)
-                .font(.title)
-                .fontWeight(.bold)
-                .fontDesign(.rounded)
-                .contentTransition(.numericText())
-
+            Text(name).font(.title).fontWeight(.bold).fontDesign(.rounded).contentTransition(.numericText())
             if let sargam = viewModel.sargamChordName {
-                Text(sargam)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                Text(sargam).font(.subheadline).foregroundStyle(.secondary)
             }
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Detected chord: \(name)")
     }
 
-    // MARK: - Expression Badge
-
     /// Badge showing pitch expression type (vibrato, meend, gamaka).
-    private func expressionBadge(_ expression: ExpressionResult) -> some View {
+    func expressionBadge(_ expression: ExpressionResult) -> some View {
         HStack(spacing: Spacing.xs) {
-            Image(systemName: expressionIcon(expression.type))
-                .font(.caption)
-            Text(expression.type.displayName)
-                .font(.caption)
-                .fontWeight(.medium)
+            Image(systemName: expressionIcon(expression.type)).font(.caption)
+            Text(expression.type.displayName).font(.caption).fontWeight(.medium)
         }
-        .padding(.horizontal, Spacing.sm)
-        .padding(.vertical, Spacing.xs)
-        .background(
-            Capsule()
-                .fill(expressionColor(expression.type).opacity(0.15))
-        )
+        .padding(.horizontal, Spacing.sm).padding(.vertical, Spacing.xs)
+        .background(Capsule().fill(expressionColor(expression.type).opacity(0.15)))
         .foregroundStyle(expressionColor(expression.type))
         .accessibilityLabel("Expression: \(expression.type.displayName)")
         .accessibilityHint("Current pitch expression detected from your playing")
     }
 
-    // MARK: - Latency Menu
-
     /// Toolbar menu for selecting latency preset.
-    private var latencyMenu: some View {
+    var latencyMenu: some View {
         Menu {
             ForEach(LatencyPreset.allCases, id: \.self) { preset in
                 Button {
@@ -510,24 +379,18 @@ struct PracticeTab: View {
                 } label: {
                     HStack {
                         Text(preset.displayName)
-                        if preset == viewModel.latencyPreset {
-                            Image(systemName: "checkmark")
-                        }
+                        if preset == viewModel.latencyPreset { Image(systemName: "checkmark") }
                     }
                 }
             }
         } label: {
-            Image(systemName: "waveform.badge.magnifyingglass")
-                .font(.title3)
+            Image(systemName: "waveform.badge.magnifyingglass").font(.title3)
         }
         .accessibilityLabel("Latency preset")
         .accessibilityHint("Choose detection speed: fast, balanced, or precise")
     }
-
-    // MARK: - Helpers
-
     /// Color based on tuning accuracy.
-    private func centsColor(_ cents: Double) -> Color {
+    func centsColor(_ cents: Double) -> Color {
         let absCents = abs(cents)
         if absCents < 5 { return .green }
         if absCents < 15 { return .yellow }
@@ -535,7 +398,7 @@ struct PracticeTab: View {
     }
 
     /// Text label for cents offset.
-    private func centsText(_ cents: Double) -> String {
+    func centsText(_ cents: Double) -> String {
         let absCents = abs(cents)
         if absCents < 5 { return "In Tune" }
         let direction = cents > 0 ? "sharp" : "flat"
@@ -543,7 +406,7 @@ struct PracticeTab: View {
     }
 
     /// SF Symbol name for each expression type.
-    private func expressionIcon(_ type: ExpressionType) -> String {
+    func expressionIcon(_ type: ExpressionType) -> String {
         switch type {
         case .vibrato: "waveform.path"
         case .meend: "arrow.right"
@@ -554,7 +417,7 @@ struct PracticeTab: View {
     }
 
     /// Color for each expression type.
-    private func expressionColor(_ type: ExpressionType) -> Color {
+    func expressionColor(_ type: ExpressionType) -> Color {
         switch type {
         case .vibrato: .blue
         case .meend: .purple
@@ -563,7 +426,6 @@ struct PracticeTab: View {
         case .indeterminate: .gray
         }
     }
-
 }
 
 #Preview {

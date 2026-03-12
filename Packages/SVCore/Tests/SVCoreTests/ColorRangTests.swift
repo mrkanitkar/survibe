@@ -36,12 +36,12 @@ struct ColorRangTests {
     func colorsResolveInBothSchemes() {
         // Resolve each color to verify they don't crash
         // (Color is a value type, accessing it validates the initializer)
-        let _ = Color.rangNeel.description
-        let _ = Color.rangHara.description
-        let _ = Color.rangPeela.description
-        let _ = Color.rangLal.description
-        let _ = Color.rangSona.description
-        let _ = Color.rangPeelaDark.description
-        let _ = Color.rangSonaDark.description
+        _ = Color.rangNeel.description
+        _ = Color.rangHara.description
+        _ = Color.rangPeela.description
+        _ = Color.rangLal.description
+        _ = Color.rangSona.description
+        _ = Color.rangPeelaDark.description
+        _ = Color.rangSonaDark.description
     }
 }

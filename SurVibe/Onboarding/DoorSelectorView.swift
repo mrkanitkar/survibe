@@ -91,12 +91,19 @@ struct DoorSelectorView: View {
         let fillColor: Color = isSelected ? Color.accentColor.opacity(0.08) : Color(.secondarySystemBackground)
         let strokeColor: Color = isSelected ? Color.accentColor : .clear
         let iconForeground: Color = isSelected ? .white : isDisabled ? Color.gray : Color.accentColor
-        let iconBackground: Color = isSelected ? Color.accentColor : isDisabled ? Color(.tertiarySystemFill) : Color.accentColor.opacity(0.12)
+        let iconBackground: Color = isSelected
+            ? Color.accentColor
+            : isDisabled ? Color(.tertiarySystemFill) : Color.accentColor.opacity(0.12)
 
         return Button {
             toggleDoor(door)
         } label: {
-            doorCardLabel(door: door, isDisabled: isDisabled, iconForeground: iconForeground, iconBackground: iconBackground)
+            doorCardLabel(
+                door: door,
+                isDisabled: isDisabled,
+                iconForeground: iconForeground,
+                iconBackground: iconBackground
+            )
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 20)
                 .padding(.horizontal, 8)

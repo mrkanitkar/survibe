@@ -73,7 +73,10 @@ struct OnboardingContainerView: View {
                         .fill(index == onboardingManager.currentScreen ? Color.accentColor : Color(.systemGray4))
                         .frame(width: 8, height: 8)
                         .scaleEffect(index == onboardingManager.currentScreen ? 1.2 : 1.0)
-                        .animation(reduceMotion ? .none : .easeInOut(duration: 0.2), value: onboardingManager.currentScreen)
+                        .animation(
+                            reduceMotion ? .none : .easeInOut(duration: 0.2),
+                            value: onboardingManager.currentScreen
+                        )
                 }
             }
             .accessibilityElement(children: .ignore)

@@ -226,26 +226,51 @@ public final class PracticeAudioProcessor {
         confidenceThreshold: Double
     ) -> PitchResult? {
         let samples = snapshot.samples
-        let frameLength = samples.count
-        guard frameLength > 0 else { return nil }
+        guard !samples.isEmpty else { return nil }
 
-        // Calculate RMS amplitude
-        var sum: Float = 0
-        for i in 0..<frameLength {
-            sum += samples[i] * samples[i]
-        }
-        let rms = Double(sqrt(sum / Float(frameLength)))
-
+        let rms = calculateRMS(samples)
         guard rms >= silenceThreshold else { return nil }
 
-        // Simple autocorrelation pitch detection
         let sampleRate = snapshot.sampleRate
         guard sampleRate > 0 else { return nil }
 
-        // Search for pitch in the range ~50Hz to ~2000Hz
+        let result = findBestCorrelation(
+            samples: samples, sampleRate: sampleRate
+        )
+        guard result.confidence >= confidenceThreshold,
+              result.lag > 0
+        else { return nil }
+
+        let frequency = sampleRate / Double(result.lag)
+
+        guard let (noteName, octave, centsOffset) = try? SwarUtility.frequencyToNote(
+            frequency, referencePitch: referencePitch
+        ) else { return nil }
+
+        return PitchResult(
+            frequency: frequency, amplitude: rms,
+            noteName: noteName, octave: octave,
+            centsOffset: centsOffset, confidence: result.confidence
+        )
+    }
+
+    /// Calculate RMS amplitude from audio samples.
+    nonisolated private static func calculateRMS(_ samples: [Float]) -> Double {
+        var sum: Float = 0
+        for i in 0..<samples.count {
+            sum += samples[i] * samples[i]
+        }
+        return Double(sqrt(sum / Float(samples.count)))
+    }
+
+    /// Find the best autocorrelation lag and its confidence.
+    nonisolated private static func findBestCorrelation(
+        samples: [Float], sampleRate: Double
+    ) -> (lag: Int, confidence: Double) {
+        let frameLength = samples.count
         let minLag = Int(sampleRate / 2000.0)
         let maxLag = min(Int(sampleRate / 50.0), frameLength / 2)
-        guard minLag < maxLag else { return nil }
+        guard minLag < maxLag else { return (0, 0) }
 
         var bestCorrelation: Float = 0
         var bestLag = 0
@@ -264,35 +289,15 @@ public final class PracticeAudioProcessor {
 
             let normProduct = sqrt(norm1 * norm2)
             guard normProduct > 0 else { continue }
-            let normalizedCorrelation = correlation / normProduct
+            let normalized = correlation / normProduct
 
-            if normalizedCorrelation > bestCorrelation {
-                bestCorrelation = normalizedCorrelation
+            if normalized > bestCorrelation {
+                bestCorrelation = normalized
                 bestLag = lag
             }
         }
 
-        let confidence = Double(bestCorrelation)
-        guard confidence >= confidenceThreshold, bestLag > 0 else { return nil }
-
-        let frequency = sampleRate / Double(bestLag)
-
-        // Convert frequency to note using SwarUtility
-        guard let (noteName, octave, centsOffset) = try? SwarUtility.frequencyToNote(
-            frequency,
-            referencePitch: referencePitch
-        ) else {
-            return nil
-        }
-
-        return PitchResult(
-            frequency: frequency,
-            amplitude: rms,
-            noteName: noteName,
-            octave: octave,
-            centsOffset: centsOffset,
-            confidence: confidence
-        )
+        return (bestLag, Double(bestCorrelation))
     }
 }
 

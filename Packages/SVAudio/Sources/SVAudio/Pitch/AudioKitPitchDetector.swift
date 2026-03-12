@@ -83,100 +83,14 @@ public final class AudioKitPitchDetector: PitchDetectorProtocol {
             self.isDetecting = true
             self.status = "Installing mic tap..."
 
-            // Capture only what the tap closure needs — no `self` capture.
-            // This avoids actor-isolation issues since the closure is @Sendable.
             let queue = self.processingQueue
             let counter = AtomicCounter()
 
             AudioEngineManager.shared.installMicTap { buffer, _ in
-                // Audio render thread — only copy data, do NOT do heavy work here.
-                guard let channelData = buffer.floatChannelData?[0] else {
-                    return
-                }
-                let frameLength = Int(buffer.frameLength)
-                guard frameLength > 0 else { return }
-                let sampleRate = buffer.format.sampleRate
-                let samples = Array(
-                    UnsafeBufferPointer(start: channelData, count: frameLength)
+                Self.handleMicBuffer(
+                    buffer, counter: counter, queue: queue,
+                    continuation: continuation, refPitch: refPitch
                 )
-
-                let count = counter.increment()
-                // Log every 50th buffer to confirm tap is firing
-                if count % 50 == 1 {
-                    pitchLogger.info(
-                        "Tap buffer #\(count): frames=\(frameLength) rate=\(sampleRate)"
-                    )
-                }
-
-                // Dispatch all processing to dedicated queue
-                queue.async {
-                    let amplitude = Self.calculateRMS(samples)
-
-                    // Log amplitude periodically to see if mic is picking up sound
-                    if count % 50 == 1 {
-                        pitchLogger.info(
-                            "Buffer #\(count) amp=\(String(format: "%.6f", amplitude))"
-                        )
-                    }
-
-                    // Always yield amplitude-only result so UI can show live level
-                    // Use frequency=0 to indicate "no pitch detected"
-                    if amplitude <= 0.002 {
-                        let silentResult = PitchResult(
-                            frequency: 0,
-                            amplitude: amplitude,
-                            noteName: "",
-                            octave: 0,
-                            centsOffset: 0,
-                            confidence: 0
-                        )
-                        continuation.yield(silentResult)
-                        return
-                    }
-
-                    let frequency = Self.detectPitch(
-                        samples: samples,
-                        sampleRate: sampleRate
-                    )
-
-                    // Log DSP results periodically
-                    if count % 20 == 1 {
-                        pitchLogger.info(
-                            "DSP: amp=\(String(format: "%.4f", amplitude)) freq=\(String(format: "%.1f", frequency))"
-                        )
-                    }
-
-                    if frequency > 0, let (noteName, octave, cents) =
-                        try? SwarUtility.frequencyToNote(
-                            frequency, referencePitch: refPitch
-                        ) {
-                        let confidence = min(1.0, amplitude * 2.0)
-
-                        let result = PitchResult(
-                            frequency: frequency,
-                            amplitude: amplitude,
-                            noteName: noteName,
-                            octave: octave,
-                            centsOffset: cents,
-                            confidence: confidence
-                        )
-                        pitchLogger.info(
-                            "DETECTED: \(noteName)\(octave) \(String(format: "%.1f", frequency))Hz amp=\(String(format: "%.4f", amplitude))"
-                        )
-                        continuation.yield(result)
-                    } else {
-                        // Yield amplitude-only so UI knows mic is working
-                        let noFreqResult = PitchResult(
-                            frequency: 0,
-                            amplitude: amplitude,
-                            noteName: "",
-                            octave: 0,
-                            centsOffset: 0,
-                            confidence: 0
-                        )
-                        continuation.yield(noFreqResult)
-                    }
-                }
             }
 
             self.status = "Listening"
@@ -206,6 +120,103 @@ public final class AudioKitPitchDetector: PitchDetectorProtocol {
         pitchLogger.info("Pitch detector stopped")
     }
 
+    // MARK: - Mic Buffer Handling (nonisolated static)
+
+    /// Handle a mic buffer from the audio tap on a background queue.
+    nonisolated private static func handleMicBuffer(
+        _ buffer: AVAudioPCMBuffer,
+        counter: AtomicCounter,
+        queue: DispatchQueue,
+        continuation: AsyncStream<PitchResult>.Continuation,
+        refPitch: Double
+    ) {
+        guard let channelData = buffer.floatChannelData?[0] else { return }
+        let frameLength = Int(buffer.frameLength)
+        guard frameLength > 0 else { return }
+        let sampleRate = buffer.format.sampleRate
+        let samples = Array(
+            UnsafeBufferPointer(start: channelData, count: frameLength)
+        )
+
+        let count = counter.increment()
+        if count % 50 == 1 {
+            pitchLogger.info(
+                "Tap buffer #\(count): frames=\(frameLength) rate=\(sampleRate)"
+            )
+        }
+
+        queue.async {
+            processBuffer(
+                samples: samples, sampleRate: sampleRate,
+                bufferCount: count, continuation: continuation,
+                refPitch: refPitch
+            )
+        }
+    }
+
+    /// Process audio samples on the DSP queue and yield pitch results.
+    nonisolated private static func processBuffer(
+        samples: [Float],
+        sampleRate: Double,
+        bufferCount: Int,
+        continuation: AsyncStream<PitchResult>.Continuation,
+        refPitch: Double
+    ) {
+        let amplitude = calculateRMS(samples)
+
+        if bufferCount % 50 == 1 {
+            pitchLogger.info(
+                "Buffer #\(bufferCount) amp=\(String(format: "%.6f", amplitude))"
+            )
+        }
+
+        guard amplitude > 0.002 else {
+            continuation.yield(silenceResult(amplitude: amplitude))
+            return
+        }
+
+        let frequency = detectPitch(samples: samples, sampleRate: sampleRate)
+
+        if bufferCount % 20 == 1 {
+            let ampStr = String(format: "%.4f", amplitude)
+            let freqStr = String(format: "%.1f", frequency)
+            pitchLogger.info("DSP: amp=\(ampStr) freq=\(freqStr)")
+        }
+
+        guard frequency > 0,
+              let (noteName, octave, cents) = try? SwarUtility.frequencyToNote(
+                  frequency, referencePitch: refPitch
+              )
+        else {
+            continuation.yield(silenceResult(amplitude: amplitude))
+            return
+        }
+
+        let confidence = min(1.0, amplitude * 2.0)
+        let result = PitchResult(
+            frequency: frequency, amplitude: amplitude,
+            noteName: noteName, octave: octave,
+            centsOffset: cents, confidence: confidence
+        )
+        let ampStr = String(format: "%.4f", amplitude)
+        let freqStr = String(format: "%.1f", frequency)
+        pitchLogger.info(
+            "DETECTED: \(noteName)\(octave) \(freqStr)Hz amp=\(ampStr)"
+        )
+        continuation.yield(result)
+    }
+
+    /// Create a silent/no-pitch result for the given amplitude.
+    nonisolated private static func silenceResult(
+        amplitude: Double
+    ) -> PitchResult {
+        PitchResult(
+            frequency: 0, amplitude: amplitude,
+            noteName: "", octave: 0,
+            centsOffset: 0, confidence: 0
+        )
+    }
+
     // MARK: - DSP (nonisolated static — safe to call from any thread)
 
     /// Calculate RMS amplitude from audio samples.
@@ -223,11 +234,34 @@ public final class AudioKitPitchDetector: PitchDetectorProtocol {
         samples: [Float],
         sampleRate: Double
     ) -> Double {
-        let frameCount = samples.count
-        let halfLength = frameCount / 2
-        guard halfLength > 2 else { return 0 }
+        let autocorrelation = computeAutocorrelation(samples)
+        guard !autocorrelation.isEmpty else { return 0 }
 
-        // Compute autocorrelation via dot product at each lag
+        let halfLength = autocorrelation.count
+        let minLag = max(2, Int(sampleRate / 4000.0))
+        guard minLag < halfLength else { return 0 }
+
+        let bestLag = findBestLag(
+            autocorrelation, minLag: minLag, halfLength: halfLength
+        )
+        guard bestLag > 0 else { return 0 }
+
+        let refinedLag = parabolicInterpolation(
+            autocorrelation, lag: bestLag
+        )
+        guard refinedLag > 0 else { return 0 }
+
+        let frequency = sampleRate / refinedLag
+        return (frequency > 50 && frequency < 4000) ? frequency : 0
+    }
+
+    /// Compute normalized autocorrelation of audio samples via vDSP.
+    nonisolated private static func computeAutocorrelation(
+        _ samples: [Float]
+    ) -> [Float] {
+        let halfLength = samples.count / 2
+        guard halfLength > 2 else { return [] }
+
         var autocorrelation = [Float](repeating: 0, count: halfLength)
 
         samples.withUnsafeBufferPointer { bufPtr in
@@ -239,68 +273,55 @@ public final class AudioKitPitchDetector: PitchDetectorProtocol {
                 vDSP_dotpr(
                     baseAddress, 1,
                     baseAddress + lag, 1,
-                    &sum,
-                    count
+                    &sum, count
                 )
                 autocorrelation[lag] = sum
             }
         }
 
-        // Normalize by the zero-lag value (autocorrelation[0] == signal energy;
-        // zero means silence or a fully-zero buffer — no pitch to detect).
-        guard autocorrelation[0] > 0 else { return 0 }
+        guard autocorrelation[0] > 0 else { return [] }
         var invNorm: Float = 1.0 / autocorrelation[0]
         var normalized = [Float](repeating: 0, count: halfLength)
         vDSP_vsmul(
             &autocorrelation, 1, &invNorm, &normalized, 1,
             vDSP_Length(halfLength)
         )
-        autocorrelation = normalized
+        return normalized
+    }
 
-        // Find first peak after the initial decline
-        // Min lag: sampleRate / 4000 Hz, but at least 2
-        let minLag = max(2, Int(sampleRate / 4000.0))
-        guard minLag < halfLength else { return 0 }
-
+    /// Find the best autocorrelation lag (first peak after initial decline).
+    nonisolated private static func findBestLag(
+        _ autocorrelation: [Float], minLag: Int, halfLength: Int
+    ) -> Int {
         var bestLag = 0
         var bestVal: Float = 0
         var declining = true
 
         for lag in minLag..<halfLength {
-            if declining && autocorrelation[lag] > autocorrelation[lag - 1] {
+            if declining, autocorrelation[lag] > autocorrelation[lag - 1] {
                 declining = false
             }
-            if !declining && autocorrelation[lag] > bestVal {
+            if !declining, autocorrelation[lag] > bestVal {
                 bestVal = autocorrelation[lag]
                 bestLag = lag
             }
-            if !declining
-                && autocorrelation[lag] < autocorrelation[lag - 1]
-            {
+            if !declining, autocorrelation[lag] < autocorrelation[lag - 1] {
                 break
             }
         }
+        return bestVal > 0.2 ? bestLag : 0
+    }
 
-        guard bestLag > 0, bestVal > 0.2 else { return 0 }
-
-        // Parabolic interpolation for sub-sample accuracy
-        let refinedLag: Double
-        if bestLag > 0 && bestLag < halfLength - 1 {
-            let s0 = Double(autocorrelation[bestLag - 1])
-            let s1 = Double(autocorrelation[bestLag])
-            let s2 = Double(autocorrelation[bestLag + 1])
-            let denom = 2.0 * (2.0 * s1 - s2 - s0)
-            if abs(denom) > 1e-10 {
-                refinedLag = Double(bestLag) + (s2 - s0) / denom
-            } else {
-                refinedLag = Double(bestLag)
-            }
-        } else {
-            refinedLag = Double(bestLag)
-        }
-
-        guard refinedLag > 0 else { return 0 }
-        let frequency = sampleRate / refinedLag
-        return (frequency > 50 && frequency < 4000) ? frequency : 0
+    /// Parabolic interpolation for sub-sample pitch accuracy.
+    nonisolated private static func parabolicInterpolation(
+        _ data: [Float], lag: Int
+    ) -> Double {
+        guard lag > 0, lag < data.count - 1 else { return Double(lag) }
+        let s0 = Double(data[lag - 1])
+        let s1 = Double(data[lag])
+        let s2 = Double(data[lag + 1])
+        let denom = 2.0 * (2.0 * s1 - s2 - s0)
+        guard abs(denom) > 1e-10 else { return Double(lag) }
+        return Double(lag) + (s2 - s0) / denom
     }
 }

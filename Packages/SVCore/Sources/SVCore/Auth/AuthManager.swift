@@ -134,40 +134,11 @@ public final class AuthManager: NSObject, AuthManagerProtocol,
                 controller.performRequests()
             }
 
-            do {
-                try KeychainHelper.storeUserIdentifier(user.userIdentifier)
-            } catch {
-                Self.logger.error(
-                    "Failed to store user identifier in Keychain: \(error.localizedDescription)"
-                )
-            }
-
-            authState = .authenticated(user)
-            AnalyticsManager.shared.track(
-                .signInCompleted,
-                properties: ["has_name": !user.displayName.isEmpty]
-            )
-            Self.logger.info("Sign in with Apple completed successfully.")
+            persistAndTrackSuccess(user: user)
             return user
-
         } catch let error as AuthError {
-            switch error {
-            case .cancelled:
-                authState = .anonymous
-                AnalyticsManager.shared.track(.signInCancelled)
-                Self.logger.info("Sign in with Apple was cancelled by user.")
-            default:
-                authState = .error(error)
-                AnalyticsManager.shared.track(
-                    .signInFailed,
-                    properties: ["error": error.errorDescription ?? "unknown"]
-                )
-                Self.logger.error(
-                    "Sign in with Apple failed: \(error.errorDescription ?? "unknown")"
-                )
-            }
+            handleSignInAuthError(error)
             throw error
-
         } catch {
             let authError = AuthError.unknown(error.localizedDescription)
             authState = .error(authError)
@@ -177,6 +148,43 @@ public final class AuthManager: NSObject, AuthManagerProtocol,
             )
             Self.logger.error("Sign in with Apple failed: \(error.localizedDescription)")
             throw authError
+        }
+    }
+
+    /// Persist a successful sign-in to Keychain and update state.
+    private func persistAndTrackSuccess(user: AppleUser) {
+        do {
+            try KeychainHelper.storeUserIdentifier(user.userIdentifier)
+        } catch {
+            Self.logger.error(
+                "Failed to store user identifier in Keychain: \(error.localizedDescription)"
+            )
+        }
+
+        authState = .authenticated(user)
+        AnalyticsManager.shared.track(
+            .signInCompleted,
+            properties: ["has_name": !user.displayName.isEmpty]
+        )
+        Self.logger.info("Sign in with Apple completed successfully.")
+    }
+
+    /// Handle an `AuthError` thrown during sign-in.
+    private func handleSignInAuthError(_ error: AuthError) {
+        switch error {
+        case .cancelled:
+            authState = .anonymous
+            AnalyticsManager.shared.track(.signInCancelled)
+            Self.logger.info("Sign in with Apple was cancelled by user.")
+        default:
+            authState = .error(error)
+            AnalyticsManager.shared.track(
+                .signInFailed,
+                properties: ["error": error.errorDescription ?? "unknown"]
+            )
+            Self.logger.error(
+                "Sign in with Apple failed: \(error.errorDescription ?? "unknown")"
+            )
         }
     }
 
@@ -253,7 +261,6 @@ public final class AuthManager: NSObject, AuthManagerProtocol,
                 try? KeychainHelper.deleteUserIdentifier()
                 authState = .anonymous
             }
-
         } catch {
             Self.logger.error(
                 "Failed to check credential state: \(error.localizedDescription)"
@@ -297,7 +304,6 @@ public final class AuthManager: NSObject, AuthManagerProtocol,
                 try? KeychainHelper.deleteUserIdentifier()
                 authState = .anonymous
             }
-
         } catch let error as AuthError {
             throw error
         } catch {

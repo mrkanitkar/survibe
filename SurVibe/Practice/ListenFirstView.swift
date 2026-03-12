@@ -70,7 +70,8 @@ struct ListenFirstView: View {
                     .padding(.horizontal)
                     .accessibilityElement(children: .combine)
                     .accessibilityLabel(
-                        "\(noteDisplayName(note)), octave \(note.octave), duration \(String(format: "%.1f", note.duration)) beats"
+                        "\(noteDisplayName(note)), octave \(note.octave), "
+                            + "duration \(String(format: "%.1f", note.duration)) beats"
                     )
                 }
             }

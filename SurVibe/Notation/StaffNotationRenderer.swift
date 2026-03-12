@@ -280,62 +280,46 @@ struct StaffNotationRenderer: View {
         if noteInfo.noteheadType.beamCount == 0,
            noteInfo.noteheadType.flagCount > 0 {
             drawFlags(
-                context: &context, centerX: centerX,
-                centerY: centerY, direction: noteInfo.stemDirection,
-                flagCount: noteInfo.noteheadType.flagCount,
+                context: &context, noteInfo: noteInfo,
+                centerX: centerX, centerY: centerY,
                 color: color
             )
         }
     }
+}
 
+// MARK: - Component Drawing
+
+private extension StaffNotationRenderer {
     /// Draw a rest symbol at the note's x-position.
-    private func drawRest(context: inout GraphicsContext, noteInfo: StaffNoteInfo, staffTop: CGFloat) {
+    func drawRest(context: inout GraphicsContext, noteInfo: StaffNoteInfo, staffTop: CGFloat) {
         let centerX = noteInfo.xPosition
-        let centerY = staffTop + staffHeight / 2  // Center of staff
-
-        let restSymbol: String
-        switch noteInfo.noteheadType {
-        case .whole:
-            restSymbol = "\u{1D13B}"
-        case .half:
-            restSymbol = "\u{1D13C}"
-        case .quarter:
-            restSymbol = "\u{1D13D}"
-        case .eighth:
-            restSymbol = "\u{1D13E}"
-        case .sixteenth:
-            restSymbol = "\u{1D13F}"
+        let centerY = staffTop + staffHeight / 2
+        let restSymbol: String = switch noteInfo.noteheadType {
+        case .whole: "\u{1D13B}"
+        case .half: "\u{1D13C}"
+        case .quarter: "\u{1D13D}"
+        case .eighth: "\u{1D13E}"
+        case .sixteenth: "\u{1D13F}"
         }
-
         let text = Text(restSymbol).font(.system(size: 24)).foregroundColor(staffSwiftUIColor)
         context.draw(context.resolve(text), at: CGPoint(x: centerX, y: centerY), anchor: .center)
     }
 
-    // MARK: - Component Drawing
-
     /// Draw a note stem.
-    private func drawStem(
-        context: inout GraphicsContext,
-        centerX: CGFloat,
-        centerY: CGFloat,
-        direction: StemDirection,
-        color: Color
+    func drawStem(
+        context: inout GraphicsContext, centerX: CGFloat,
+        centerY: CGFloat, direction: StemDirection, color: Color
     ) {
-        let stemX: CGFloat
-        let stemStartY: CGFloat
-        let stemEndY: CGFloat
-
+        let stemX: CGFloat, stemStartY: CGFloat, stemEndY: CGFloat
         switch direction {
         case .up:
             stemX = centerX + noteheadWidth / 2 - stemWidth / 2
-            stemStartY = centerY
-            stemEndY = centerY - stemLength
+            stemStartY = centerY; stemEndY = centerY - stemLength
         case .down:
             stemX = centerX - noteheadWidth / 2 + stemWidth / 2
-            stemStartY = centerY
-            stemEndY = centerY + stemLength
+            stemStartY = centerY; stemEndY = centerY + stemLength
         }
-
         var path = Path()
         path.move(to: CGPoint(x: stemX, y: stemStartY))
         path.addLine(to: CGPoint(x: stemX, y: stemEndY))
@@ -343,83 +327,46 @@ struct StaffNotationRenderer: View {
     }
 
     /// Draw flags on an unbeamed note.
-    private func drawFlags(
-        context: inout GraphicsContext,
-        centerX: CGFloat,
-        centerY: CGFloat,
-        direction: StemDirection,
-        flagCount: Int,
-        color: Color
+    func drawFlags(
+        context: inout GraphicsContext, noteInfo: StaffNoteInfo,
+        centerX: CGFloat, centerY: CGFloat, color: Color
     ) {
-        let stemX: CGFloat
-        let stemEndY: CGFloat
-
-        switch direction {
-        case .up:
-            stemX = centerX + noteheadWidth / 2 - stemWidth / 2
-            stemEndY = centerY - stemLength
-        case .down:
-            stemX = centerX - noteheadWidth / 2 + stemWidth / 2
-            stemEndY = centerY + stemLength
-        }
-
-        for flag in 0..<flagCount {
-            let flagOffset = CGFloat(flag) * 6.0
-            let flagY = direction == .up ? stemEndY + flagOffset : stemEndY - flagOffset
-            let flagEndX = stemX + (direction == .up ? 8 : -8)
-            let flagEndY = flagY + (direction == .up ? 10 : -10)
-
-            var flagPath = Path()
-            flagPath.move(to: CGPoint(x: stemX, y: flagY))
-            flagPath.addQuadCurve(
-                to: CGPoint(x: flagEndX, y: flagEndY),
-                control: CGPoint(x: stemX + (direction == .up ? 12 : -12), y: flagY + (direction == .up ? 4 : -4))
-            )
-            context.stroke(flagPath, with: .color(color), lineWidth: 1.5)
+        let dir = noteInfo.stemDirection
+        let stemX = dir == .up
+            ? centerX + noteheadWidth / 2 - stemWidth / 2
+            : centerX - noteheadWidth / 2 + stemWidth / 2
+        let stemEndY = dir == .up ? centerY - stemLength : centerY + stemLength
+        for flag in 0..<noteInfo.noteheadType.flagCount {
+            let off = CGFloat(flag) * 6.0
+            let flagY = dir == .up ? stemEndY + off : stemEndY - off
+            var p = Path()
+            p.move(to: CGPoint(x: stemX, y: flagY))
+            p.addQuadCurve(
+                to: CGPoint(x: stemX + (dir == .up ? 8 : -8), y: flagY + (dir == .up ? 10 : -10)),
+                control: CGPoint(x: stemX + (dir == .up ? 12 : -12), y: flagY + (dir == .up ? 4 : -4)))
+            context.stroke(p, with: .color(color), lineWidth: 1.5)
         }
     }
 
     /// Draw ledger lines for notes above or below the staff.
-    private func drawLedgerLines(
-        context: inout GraphicsContext,
-        noteInfo: StaffNoteInfo,
-        staffTop: CGFloat,
-        centerX: CGFloat
+    func drawLedgerLines(
+        context: inout GraphicsContext, noteInfo: StaffNoteInfo, staffTop: CGFloat, centerX: CGFloat
     ) {
-        let ledgerCount = noteInfo.ledgerLines.count
-        guard ledgerCount > 0 else { return }
-
-        let halfWidth = noteheadWidth * 0.8
-        let lineColor = staffColor
-
-        if noteInfo.ledgerLines.isAbove {
-            // Lines above staff: positions 10, 12, 14, ...
-            for i in 0..<noteInfo.ledgerLines.count {
-                let position = 10 + (i * 2)
-                let y = yForStaffPosition(position, staffTop: staffTop)
-                var path = Path()
-                path.move(to: CGPoint(x: centerX - halfWidth, y: y))
-                path.addLine(to: CGPoint(x: centerX + halfWidth, y: y))
-                context.stroke(path, with: .color(lineColor), lineWidth: 0.8)
-            }
-        } else {
-            // Lines below staff: positions -2, -4, -6, ...
-            for i in 0..<noteInfo.ledgerLines.count {
-                let position = -2 - (i * 2)
-                let y = yForStaffPosition(position, staffTop: staffTop)
-                var path = Path()
-                path.move(to: CGPoint(x: centerX - halfWidth, y: y))
-                path.addLine(to: CGPoint(x: centerX + halfWidth, y: y))
-                context.stroke(path, with: .color(lineColor), lineWidth: 0.8)
-            }
+        guard noteInfo.ledgerLines.count > 0 else { return } // swiftlint:disable:this empty_count
+        let halfWidth = noteheadWidth * 0.8, lineColor = staffColor
+        for i in 0..<noteInfo.ledgerLines.count {
+            let position = noteInfo.ledgerLines.isAbove ? 10 + (i * 2) : -2 - (i * 2)
+            let y = yForStaffPosition(position, staffTop: staffTop)
+            var path = Path()
+            path.move(to: CGPoint(x: centerX - halfWidth, y: y))
+            path.addLine(to: CGPoint(x: centerX + halfWidth, y: y))
+            context.stroke(path, with: .color(lineColor), lineWidth: 0.8)
         }
     }
 
     /// Draw barlines at the specified x-positions.
-    private func drawBarlines(context: inout GraphicsContext, staffTop: CGFloat, positions: [Double]) {
-        let lineColor = staffColor
-        let staffBottom = staffTop + staffHeight
-
+    func drawBarlines(context: inout GraphicsContext, staffTop: CGFloat, positions: [Double]) {
+        let lineColor = staffColor, staffBottom = staffTop + staffHeight
         for xPos in positions {
             var path = Path()
             path.move(to: CGPoint(x: xPos, y: staffTop))
@@ -429,74 +376,50 @@ struct StaffNotationRenderer: View {
     }
 
     /// Draw a beam group connecting note stems.
-    private func drawBeamGroup(
-        context: inout GraphicsContext,
-        group: BeamGroup,
-        notes: [StaffNoteInfo],
-        staffTop: CGFloat
+    func drawBeamGroup(
+        context: inout GraphicsContext, group: BeamGroup, notes: [StaffNoteInfo], staffTop: CGFloat
     ) {
-        guard group.noteIndices.count >= 2 else { return }
-
-        let firstIndex = group.noteIndices.first!
-        let lastIndex = group.noteIndices.last!
-        let firstNote = notes[firstIndex]
-        let lastNote = notes[lastIndex]
-
-        let direction = firstNote.stemDirection
-        let beamColor = staffSwiftUIColor
-
-        for beamLevel in 0..<group.beamCount {
-            let beamOffset = CGFloat(beamLevel) * 4.0
-
-            let firstX: CGFloat
-            let firstY: CGFloat
-            let lastX: CGFloat
-            let lastY: CGFloat
-
-            let firstCenterY = yForStaffPosition(firstNote.staffYOffset, staffTop: staffTop)
-            let lastCenterY = yForStaffPosition(lastNote.staffYOffset, staffTop: staffTop)
-
-            switch direction {
-            case .up:
-                firstX = firstNote.xPosition + noteheadWidth / 2 - stemWidth / 2
-                firstY = firstCenterY - stemLength + beamOffset
-                lastX = lastNote.xPosition + noteheadWidth / 2 - stemWidth / 2
-                lastY = lastCenterY - stemLength + beamOffset
-            case .down:
-                firstX = firstNote.xPosition - noteheadWidth / 2 + stemWidth / 2
-                firstY = firstCenterY + stemLength - beamOffset
-                lastX = lastNote.xPosition - noteheadWidth / 2 + stemWidth / 2
-                lastY = lastCenterY + stemLength - beamOffset
+        guard group.noteIndices.count >= 2,
+              let firstIdx = group.noteIndices.first, let lastIdx = group.noteIndices.last
+        else { return }
+        let first = notes[firstIdx], last = notes[lastIdx]
+        let dir = first.stemDirection, beamColor = staffSwiftUIColor
+        let fc = yForStaffPosition(first.staffYOffset, staffTop: staffTop)
+        let lc = yForStaffPosition(last.staffYOffset, staffTop: staffTop)
+        for level in 0..<group.beamCount {
+            let off = CGFloat(level) * 4.0
+            let fx: CGFloat
+            let fy: CGFloat
+            let lx: CGFloat
+            let ly: CGFloat
+            if dir == .up {
+                fx = first.xPosition + noteheadWidth / 2 - stemWidth / 2
+                fy = fc - stemLength + off
+                lx = last.xPosition + noteheadWidth / 2 - stemWidth / 2
+                ly = lc - stemLength + off
+            } else {
+                fx = first.xPosition - noteheadWidth / 2 + stemWidth / 2
+                fy = fc + stemLength - off
+                lx = last.xPosition - noteheadWidth / 2 + stemWidth / 2
+                ly = lc + stemLength - off
             }
-
-            var beamPath = Path()
-            beamPath.move(to: CGPoint(x: firstX, y: firstY))
-            beamPath.addLine(to: CGPoint(x: lastX, y: lastY))
-            context.stroke(beamPath, with: .color(beamColor), lineWidth: 3.0)
+            var p = Path()
+            p.move(to: CGPoint(x: fx, y: fy))
+            p.addLine(to: CGPoint(x: lx, y: ly))
+            context.stroke(p, with: .color(beamColor), lineWidth: 3.0)
         }
     }
 
-    // MARK: - Helpers
-
     /// Convert a staff position to a Y coordinate.
-    ///
-    /// Position 0 = bottom line (E4). Position 8 = top line (F5).
-    /// Higher positions have lower Y values (screen coordinates).
-    private func yForStaffPosition(_ position: Int, staffTop: CGFloat) -> CGFloat {
-        let topLinePosition = 8
-        let halfSpace = staffSpacing / 2
-        return staffTop + CGFloat(topLinePosition - position) * halfSpace
+    func yForStaffPosition(_ position: Int, staffTop: CGFloat) -> CGFloat {
+        staffTop + CGFloat(8 - position) * (staffSpacing / 2)
     }
 
-    /// Foreground color adapted for current color scheme (for Canvas `.color()`).
-    private var staffColor: Color {
-        colorScheme == .dark ? .white.opacity(0.85) : .black.opacity(0.85)
-    }
+    /// Foreground color for current color scheme.
+    var staffColor: Color { colorScheme == .dark ? .white.opacity(0.85) : .black.opacity(0.85) }
 
     /// SwiftUI Color for text elements within the canvas.
-    private var staffSwiftUIColor: Color {
-        colorScheme == .dark ? .white.opacity(0.85) : .black.opacity(0.85)
-    }
+    var staffSwiftUIColor: Color { colorScheme == .dark ? .white.opacity(0.85) : .black.opacity(0.85) }
 }
 
 // MARK: - Preview

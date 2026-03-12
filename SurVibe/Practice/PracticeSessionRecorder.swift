@@ -11,6 +11,24 @@ import os.log
 ///
 /// Lives in the main app target because it requires `ModelContext` access
 /// for SwiftData persistence. Pure scoring computation is in `SVLearning`.
+/// Bundles song metadata for a practice session recording.
+///
+/// Groups the four song-related parameters into a single value type,
+/// keeping `PracticeSessionRecorder.recordSession` under the 5-parameter limit.
+struct SessionSongInfo: Sendable {
+    /// Unique identifier of the practiced song.
+    let songId: String
+
+    /// Display title of the practiced song.
+    let songTitle: String
+
+    /// Raga name of the song (for the practice log).
+    let ragaName: String
+
+    /// Song difficulty level (1-5).
+    let difficulty: Int
+}
+
 @MainActor
 final class PracticeSessionRecorder {
     // MARK: - Properties
@@ -41,22 +59,19 @@ final class PracticeSessionRecorder {
     /// 3. **UserProfile** — XP accumulation
     ///
     /// - Parameters:
-    ///   - songId: Unique identifier of the practiced song.
-    ///   - songTitle: Display title of the practiced song.
-    ///   - ragaName: Raga name of the song (for practice log).
-    ///   - difficulty: Song difficulty level (1–5).
+    ///   - songInfo: Bundled song metadata (id, title, raga, difficulty).
     ///   - durationMinutes: Length of the practice session in minutes.
     ///   - noteScores: Array of individual note scores from the session.
     func recordSession(
-        songId: String,
-        songTitle: String,
-        ragaName: String,
-        difficulty: Int,
+        songInfo: SessionSongInfo,
         durationMinutes: Int,
         noteScores: [NoteScore]
     ) {
         let accuracy = PracticeScoring.averageAccuracy(scores: noteScores)
-        let xp = PracticeScoring.xpEarned(accuracy: accuracy, difficulty: difficulty)
+        let xp = PracticeScoring.xpEarned(
+            accuracy: accuracy,
+            difficulty: songInfo.difficulty
+        )
 
         // 1. Create RiyazEntry (additive-only daily log)
         let entry = RiyazEntry(
@@ -65,12 +80,15 @@ final class PracticeSessionRecorder {
             notesPlayed: noteScores.count,
             accuracyPercent: accuracy * 100.0,
             xpEarned: xp,
-            raagPracticed: ragaName
+            raagPracticed: songInfo.ragaName
         )
         modelContext.insert(entry)
 
         // 2. Update SongProgress (max-wins for bestScore)
-        let songProgress = fetchOrCreateSongProgress(songId: songId, songTitle: songTitle)
+        let songProgress = fetchOrCreateSongProgress(
+            songId: songInfo.songId,
+            songTitle: songInfo.songTitle
+        )
         songProgress.recordPlay(score: accuracy * 100.0)
 
         // Mark completed if achieved 3+ stars (>= 60% accuracy)
@@ -83,7 +101,7 @@ final class PracticeSessionRecorder {
         updateUserXP(xp)
 
         Self.logger.info(
-            "Session recorded: song=\(songId) accuracy=\(accuracy) xp=\(xp) notes=\(noteScores.count)"
+            "Session recorded: song=\(songInfo.songId) accuracy=\(accuracy) xp=\(xp) notes=\(noteScores.count)"
         )
     }
 

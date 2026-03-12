@@ -5,11 +5,11 @@ import Foundation
 /// Users pick 1-3 doors to personalize their home screen experience.
 /// Named `OnboardingDoorType` to avoid conflicts with HomeTab's DoorCard.
 enum OnboardingDoorType: String, CaseIterable, Codable, Sendable, Hashable {
-    case songs = "songs"
-    case learn = "learn"
-    case moods = "moods"
-    case community = "community"
-    case practice = "practice"
+    case songs
+    case learn
+    case moods
+    case community
+    case practice
 
     /// Display label for the door selection card.
     var label: String {

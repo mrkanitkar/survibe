@@ -5,9 +5,9 @@ import Foundation
 /// Maps user's self-reported piano experience to a difficulty level
 /// used for content recommendation (songs, lessons).
 enum SkillLevel: String, CaseIterable, Codable, Sendable {
-    case beginner = "beginner"
-    case intermediate = "intermediate"
-    case advanced = "advanced"
+    case beginner
+    case intermediate
+    case advanced
 
     /// Display label for UI presentation.
     var label: String {

@@ -50,10 +50,8 @@ public enum NoteGrade: String, CaseIterable, Sendable, Comparable {
     /// - Returns: The highest grade matching the accuracy.
     public static func from(accuracy: Double) -> NoteGrade {
         let clamped = max(0.0, min(1.0, accuracy))
-        for grade in NoteGrade.allCases {
-            if clamped >= grade.minimumPercentage {
-                return grade
-            }
+        for grade in NoteGrade.allCases where clamped >= grade.minimumPercentage {
+            return grade
         }
         return .miss
     }

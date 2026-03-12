@@ -135,11 +135,9 @@ struct FFTMagnitudeTests {
         // Find the actual peak bin
         var peakBin = 0
         var peakVal: Float = 0
-        for (bin, mag) in magnitudes.enumerated() {
-            if mag > peakVal {
-                peakVal = mag
-                peakBin = bin
-            }
+        for (bin, mag) in magnitudes.enumerated() where mag > peakVal {
+            peakVal = mag
+            peakBin = bin
         }
         // Allow ±2 bins due to windowing
         #expect(abs(peakBin - expectedBin) <= 2)

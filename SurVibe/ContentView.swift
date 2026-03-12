@@ -68,18 +68,22 @@ struct ContentView: View {
                 selectedTab = newTab
             }
         }
-        .fullScreenCover(isPresented: showOnboarding, onDismiss: {
-            // Show post-onboarding welcome after the fullScreenCover is fully dismissed.
-            // Using onDismiss avoids race conditions from presenting a sheet while
-            // the fullScreenCover dismiss animation is still in progress.
-            if onboardingManager.isOnboardingComplete, !hasShownPostOnboarding {
-                hasShownPostOnboarding = true
-                showPostOnboarding = true
+        .fullScreenCover(
+            isPresented: showOnboarding,
+            onDismiss: {
+                // Show post-onboarding welcome after the fullScreenCover is fully dismissed.
+                // Using onDismiss avoids race conditions from presenting a sheet while
+                // the fullScreenCover dismiss animation is still in progress.
+                if onboardingManager.isOnboardingComplete, !hasShownPostOnboarding {
+                    hasShownPostOnboarding = true
+                    showPostOnboarding = true
+                }
+            },
+            content: {
+                OnboardingContainerView()
+                    .environment(onboardingManager)
             }
-        }) {
-            OnboardingContainerView()
-                .environment(onboardingManager)
-        }
+        )
         .sheet(isPresented: $showPostOnboarding) {
             PostOnboardingWelcomeView()
                 .environment(onboardingManager)

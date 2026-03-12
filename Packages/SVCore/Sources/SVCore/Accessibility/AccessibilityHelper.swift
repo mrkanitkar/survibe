@@ -14,22 +14,27 @@ public enum AccessibilityHelper {
     ///
     /// - Parameter noteName: The swar name (e.g., "Sa", "Komal Re").
     /// - Returns: Localized VoiceOver-friendly description of the note.
+    /// Lookup table mapping swar names to their VoiceOver descriptions.
+    private static let swarDescriptions: [String: String] = [
+        "Sa": "Sa, the tonic note",
+        "Komal Re": "Komal Re, flat second",
+        "Re": "Re, the second note",
+        "Komal Ga": "Komal Ga, flat third",
+        "Ga": "Ga, the third note",
+        "Ma": "Ma, the fourth note",
+        "Tivra Ma": "Tivra Ma, sharp fourth",
+        "Pa": "Pa, the fifth note",
+        "Komal Dha": "Komal Dha, flat sixth",
+        "Dha": "Dha, the sixth note",
+        "Komal Ni": "Komal Ni, flat seventh",
+        "Ni": "Ni, the seventh note",
+    ]
+
     public static func swarLabel(for noteName: String) -> String {
-        switch noteName {
-        case "Sa": String(localized: "Sa, the tonic note", bundle: .module)
-        case "Komal Re": String(localized: "Komal Re, flat second", bundle: .module)
-        case "Re": String(localized: "Re, the second note", bundle: .module)
-        case "Komal Ga": String(localized: "Komal Ga, flat third", bundle: .module)
-        case "Ga": String(localized: "Ga, the third note", bundle: .module)
-        case "Ma": String(localized: "Ma, the fourth note", bundle: .module)
-        case "Tivra Ma": String(localized: "Tivra Ma, sharp fourth", bundle: .module)
-        case "Pa": String(localized: "Pa, the fifth note", bundle: .module)
-        case "Komal Dha": String(localized: "Komal Dha, flat sixth", bundle: .module)
-        case "Dha": String(localized: "Dha, the sixth note", bundle: .module)
-        case "Komal Ni": String(localized: "Komal Ni, flat seventh", bundle: .module)
-        case "Ni": String(localized: "Ni, the seventh note", bundle: .module)
-        default: noteName
+        guard let description = swarDescriptions[noteName] else {
+            return noteName
         }
+        return String(localized: String.LocalizationValue(description), bundle: .module)
     }
 
     /// Generate a VoiceOver label for a navigation tab.

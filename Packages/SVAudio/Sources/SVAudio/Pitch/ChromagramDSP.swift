@@ -279,11 +279,42 @@ public enum ChromagramDSP {
         vDSP_maxv(magnitudes, 1, &maxMagnitude, vDSP_Length(magnitudes.count))
         guard maxMagnitude > 0 else { return [] }
 
-        // Build a set for O(1) pitch class lookup
-        let activePitchClasses = Set(pitchClasses)
+        let bestBins = findBestBinsPerPitchClass(
+            magnitudes: magnitudes, pitchClasses: pitchClasses,
+            binResolution: binResolution, referencePitch: referencePitch
+        )
 
-        // Single pass: iterate all bins once, track the strongest bin per pitch class.
-        // This is O(bins) instead of O(bins × pitchClasses).
+        var results: [DetectedPitch] = []
+        for pitchClass in pitchClasses {
+            guard let best = bestBins[pitchClass],
+                  best.bin > 0, best.bin < magnitudes.count - 1
+            else { continue }
+
+            let refinedFreq = interpolateFrequency(
+                magnitudes: magnitudes, bin: best.bin,
+                binResolution: binResolution
+            )
+            guard let freq = refinedFreq else { continue }
+
+            if let pitch = buildDetectedPitch(
+                frequency: freq, mag: best.mag, pitchClass: pitchClass,
+                maxMagnitude: maxMagnitude, referencePitch: referencePitch
+            ) {
+                results.append(pitch)
+            }
+        }
+
+        return results.sorted { $0.frequency < $1.frequency }
+    }
+
+    /// Find the strongest FFT bin for each active pitch class.
+    nonisolated private static func findBestBinsPerPitchClass(
+        magnitudes: [Float],
+        pitchClasses: [Int],
+        binResolution: Double,
+        referencePitch: Double
+    ) -> [Int: (bin: Int, mag: Float)] {
+        let activePitchClasses = Set(pitchClasses)
         var bestBins = [Int: (bin: Int, mag: Float)](minimumCapacity: 12)
 
         for bin in 1..<magnitudes.count {
@@ -300,56 +331,44 @@ public enum ChromagramDSP {
                 bestBins[binPitchClass] = (bin, magnitudes[bin])
             }
         }
+        return bestBins
+    }
 
-        // Convert best bins to DetectedPitch results
-        var results: [DetectedPitch] = []
+    /// Parabolic interpolation to refine frequency from an FFT bin.
+    nonisolated private static func interpolateFrequency(
+        magnitudes: [Float], bin: Int, binResolution: Double
+    ) -> Double? {
+        let s0 = magnitudes[bin - 1]
+        let s1 = magnitudes[bin]
+        let s2 = magnitudes[bin + 1]
+        let denominator = 2.0 * s1 - s0 - s2
+        let refinedBin = denominator > 0
+            ? Double(bin) + Double(s2 - s0) / Double(2.0 * denominator)
+            : Double(bin)
+        let frequency = refinedBin * binResolution
+        guard frequency >= minFrequency, frequency <= maxFrequency else { return nil }
+        return frequency
+    }
 
-        for pitchClass in pitchClasses {
-            guard let best = bestBins[pitchClass],
-                  best.bin > 0, best.bin < magnitudes.count - 1
-            else { continue }
+    /// Build a DetectedPitch from a refined frequency.
+    nonisolated private static func buildDetectedPitch(
+        frequency: Double, mag: Float, pitchClass: Int,
+        maxMagnitude: Float, referencePitch: Double
+    ) -> DetectedPitch? {
+        let midiNoteExact = 69.0 + 12.0 * log2(frequency / referencePitch)
+        let roundedMidi = Int(round(midiNoteExact))
+        let centsOffset = (midiNoteExact - Double(roundedMidi)) * 100.0
+        let octave = Int(floor(Double(roundedMidi - 60) / 12.0)) + 4
+        let swarIndex = ((roundedMidi - 60) % 12 + 12) % 12
+        let noteName = swarIndex < swarNames.count ? swarNames[swarIndex] : "?"
+        let confidence = Double(mag / maxMagnitude)
 
-            let bestBin = best.bin
-            let bestMag = best.mag
-
-            // Parabolic interpolation for sub-bin accuracy
-            let s0 = magnitudes[bestBin - 1]
-            let s1 = magnitudes[bestBin]
-            let s2 = magnitudes[bestBin + 1]
-            let denominator = 2.0 * s1 - s0 - s2
-            let refinedBin: Double
-            if denominator > 0 {
-                refinedBin = Double(bestBin) + Double(s2 - s0) / Double(2.0 * denominator)
-            } else {
-                refinedBin = Double(bestBin)
-            }
-
-            let frequency = refinedBin * binResolution
-            guard frequency >= minFrequency, frequency <= maxFrequency else { continue }
-
-            // Convert to MIDI note, octave, cents
-            let midiNoteExact = 69.0 + 12.0 * log2(frequency / referencePitch)
-            let roundedMidi = Int(round(midiNoteExact))
-            let centsOffset = (midiNoteExact - Double(roundedMidi)) * 100.0
-            let octave = Int(floor(Double(roundedMidi - 60) / 12.0)) + 4
-            let swarIndex = ((roundedMidi - 60) % 12 + 12) % 12
-
-            let noteName = swarIndex < swarNames.count ? swarNames[swarIndex] : "?"
-            let confidence = Double(bestMag / maxMagnitude)
-
-            results.append(DetectedPitch(
-                frequency: frequency,
-                amplitude: confidence,
-                midiNote: roundedMidi,
-                pitchClass: pitchClass,
-                noteName: noteName,
-                octave: octave,
-                centsOffset: centsOffset,
-                confidence: confidence
-            ))
-        }
-
-        return results.sorted { $0.frequency < $1.frequency }
+        return DetectedPitch(
+            frequency: frequency, amplitude: confidence,
+            midiNote: roundedMidi, pitchClass: pitchClass,
+            noteName: noteName, octave: octave,
+            centsOffset: centsOffset, confidence: confidence
+        )
     }
 
     // MARK: - Chord Template Matching

@@ -70,7 +70,12 @@ struct SkillLevelView: View {
                 }
             }
         } label: {
-            skillCardLabel(level: level, isSelected: isSelected, iconForeground: iconForeground, iconBackground: iconBackground)
+            skillCardLabel(
+                level: level,
+                isSelected: isSelected,
+                iconForeground: iconForeground,
+                iconBackground: iconBackground
+            )
                 .padding(16)
                 .background(RoundedRectangle(cornerRadius: 14).fill(fillColor))
                 .overlay(RoundedRectangle(cornerRadius: 14).stroke(strokeColor, lineWidth: 2))

@@ -51,7 +51,11 @@ struct FilterChip: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(Text(label))
-        .accessibilityHint(isActive ? Text("Active filter. Double tap to remove.") : Text("Double tap to apply this filter."))
+        .accessibilityHint(
+            isActive
+                ? Text("Active filter. Double tap to remove.")
+                : Text("Double tap to apply this filter.")
+        )
         .accessibilityAddTraits(isActive ? [.isSelected] : [])
     }
 }

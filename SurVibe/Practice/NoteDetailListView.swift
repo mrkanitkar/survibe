@@ -84,7 +84,7 @@ struct NoteDetailListView: View {
                 allCorrectMessage
             } else {
                 LazyVStack(spacing: 8) {
-                    ForEach(Array(filteredScores.enumerated()), id: \.element.id) { index, score in
+                    ForEach(Array(filteredScores.enumerated()), id: \.element.id) { _, score in
                         noteRow(
                             score: score,
                             displayIndex: displayIndex(for: score)
