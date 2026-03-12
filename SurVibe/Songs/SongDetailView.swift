@@ -25,6 +25,12 @@ struct SongDetailView: View {
     @Environment(\.accessibilityReduceMotion)
     private var reduceMotion
 
+    @Environment(\.modelContext)
+    private var modelContext
+
+    /// Whether the practice session full-screen cover is shown.
+    @State private var showPractice = false
+
     // MARK: - Constants
 
     /// Two-column grid layout for metadata items.
@@ -47,8 +53,23 @@ struct SongDetailView: View {
                 Divider()
 
                 metadataGrid
+
+                // Practice button
+                Button {
+                    showPractice = true
+                } label: {
+                    Label("Practice This Song", systemImage: "music.note.list")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .accessibilityLabel("Practice this song")
+                .accessibilityHint("Open a practice session for this song")
             }
             .padding()
+        }
+        .fullScreenCover(isPresented: $showPractice) {
+            PracticeSessionView(song: song, modelContext: modelContext)
         }
         .navigationTitle(song.title)
         .navigationBarTitleDisplayMode(.inline)

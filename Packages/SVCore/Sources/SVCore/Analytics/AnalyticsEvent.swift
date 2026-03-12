@@ -39,4 +39,14 @@ public enum AnalyticsEvent: String, Sendable {
     case songFilterApplied = "song_filter_applied"
     case songSearchPerformed = "song_search_performed"
     case songLibraryViewed = "song_library_viewed"
+
+    // Day 9 — Practice Mode events
+    case practiceSessionStarted = "practice_session_started"
+    case practiceSessionCompleted = "practice_session_completed"
+    case practiceSessionRestarted = "practice_session_restarted"
+
+    // Day 10 — Wait Mode events
+    case waitModeToggled = "wait_mode_toggled"
+    case waitModeNoteAttempted = "wait_mode_note_attempted"
+    case waitModeCompleted = "wait_mode_completed"
 }

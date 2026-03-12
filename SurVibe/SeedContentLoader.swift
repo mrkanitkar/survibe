@@ -24,7 +24,8 @@ final class SeedContentLoader {
     /// - v1: Initial 3 songs (Day 3)
     /// - v2: +5 Hindi songs, +5 Marathi songs (Day 7/8)
     /// - v3: +Jana Gana Mana, enhanced Morya Morya with MIDI playback data
-    private static let currentContentVersion = 3
+    /// - v4: +5 English songs (Happy Birthday, London Bridge, Ode to Joy, Amazing Grace, Für Elise Theme)
+    private static let currentContentVersion = 4
 
     /// The stored seed content version from UserDefaults.
     static var storedContentVersion: Int {
