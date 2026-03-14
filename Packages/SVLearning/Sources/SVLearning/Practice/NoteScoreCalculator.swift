@@ -12,21 +12,42 @@ public enum NoteScoreCalculator {
     /// Takes raw deviation measurements and produces a `NoteScore` with
     /// composite accuracy and grade. All deviations are absolute values.
     ///
+    /// When a `ragaContext` is provided:
+    /// - `ragaPitchDeviationCents` is used for pitch accuracy instead of `pitchDeviationCents`
+    /// - Out-of-raga notes have their pitch accuracy capped at 0.3
+    ///
     /// - Parameters:
     ///   - expectedNote: The target swar note name (e.g., "Sa", "Re").
     ///   - detectedNote: The note name detected by pitch detection, if any.
-    ///   - pitchDeviationCents: Absolute cents deviation from the target pitch.
+    ///   - pitchDeviationCents: Absolute cents deviation from the target pitch (12ET).
     ///   - timingDeviationSeconds: Absolute timing deviation from expected onset.
     ///   - durationDeviation: Duration deviation as fraction of expected duration.
+    ///   - ragaPitchDeviationCents: Cents deviation from the JI target. Used when raga context is present.
+    ///   - ragaContext: Optional raga scoring context for raga-aware scoring.
     /// - Returns: A `NoteScore` with computed accuracy and grade.
     public static func score(
         expectedNote: String,
         detectedNote: String?,
         pitchDeviationCents: Double,
         timingDeviationSeconds: Double,
-        durationDeviation: Double
+        durationDeviation: Double,
+        ragaPitchDeviationCents: Double? = nil,
+        ragaContext: RagaScoringContext? = nil
     ) -> NoteScore {
-        let pitchAccuracy = pitchAccuracyScore(cents: abs(pitchDeviationCents))
+        // Use JI cents when raga context is available, otherwise 12ET cents
+        let effectivePitchCents = ragaPitchDeviationCents ?? pitchDeviationCents
+        var pitchAccuracy = pitchAccuracyScore(cents: abs(effectivePitchCents))
+
+        // Determine out-of-raga status and apply penalty
+        var isOutOfRaga: Bool?
+        if let ragaContext, let detectedNote {
+            let noteOutOfRaga = !ragaContext.isNoteInRaga(detectedNote)
+            isOutOfRaga = noteOutOfRaga
+            if noteOutOfRaga {
+                pitchAccuracy = min(pitchAccuracy, outOfRagaPitchAccuracyCap)
+            }
+        }
+
         let timingAccuracy = timingAccuracyScore(seconds: abs(timingDeviationSeconds))
         let durationAccuracy = durationAccuracyScore(fraction: abs(durationDeviation))
 
@@ -43,9 +64,14 @@ public enum NoteScoreCalculator {
             timingDeviationSeconds: timingDeviationSeconds,
             durationDeviation: durationDeviation,
             expectedNote: expectedNote,
-            detectedNote: detectedNote
+            detectedNote: detectedNote,
+            isOutOfRaga: isOutOfRaga
         )
     }
+
+    /// Maximum pitch accuracy for a note that is outside the active raga.
+    /// Set to 0.3 so out-of-raga notes never score higher than "poor".
+    private static let outOfRagaPitchAccuracyCap = 0.3
 
     /// Calculate a score when no pitch was detected (silence or below threshold).
     ///

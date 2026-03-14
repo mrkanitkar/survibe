@@ -1,0 +1,246 @@
+import Keyboard
+import SVAudio
+import SVCore
+import SwiftUI
+import Tonic
+
+/// Interactive 61-key piano keyboard with touch-to-play and pitch detection highlighting.
+///
+/// Wraps AudioKit Keyboard's `Keyboard` SwiftUI view with SurVibe-specific features:
+/// - Devanagari labels and Western note names on each key
+/// - SoundFont playback via SoundFontManager on touch
+/// - Pitch detection highlighting (blue) from external `activeMidiNotes`
+/// - Touch highlighting (green) from direct finger contact
+/// - Dual highlighting (cyan) when both sources activate the same key
+/// - Optional latching mode for chord building
+///
+/// ## Layout
+/// Uses `Keyboard(.piano, pitchRange: Pitch(36)...Pitch(96))` for 61-key range (C2–C7).
+/// Forces LTR layout direction for music notation correctness.
+struct InteractivePianoView: View {
+    // MARK: - Input Properties
+
+    /// MIDI notes currently highlighted by pitch detection (external source).
+    let activeMidiNotes: Set<Int>
+
+    /// Cents offset for tuning accuracy color on detected notes.
+    let activeCentsOffset: Double
+
+    /// Whether latching mode is enabled (keys stay held until retapped).
+    var isLatchingEnabled: Bool = false
+
+    /// Callback to clear all latched notes (called from parent view).
+    var onClearLatched: (() -> Void)?
+
+    // MARK: - Internal State
+
+    /// MIDI notes currently held by touch (internal tracking for dual highlighting).
+    @State private var touchedMidiNotes: Set<Int> = []
+
+    /// Whether the SoundFont has been loaded yet.
+    @State private var isSoundFontLoaded = false
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    // MARK: - Constants
+
+    /// Devanagari labels indexed by chromatic position (0 = Sa/C, 1 = Komal Re/Db, ...).
+    private static let devanagariLabels = [
+        "सा", "रे♭", "रे", "ग♭", "ग", "म", "म♯", "प", "ध♭", "ध", "नि♭", "नि"
+    ]
+
+    /// Western note names indexed by chromatic position.
+    private static let westernNames = [
+        "C", "Db", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"
+    ]
+
+    /// Natural (white key) chromatic offsets.
+    private static let naturalOffsets: Set<Int> = [0, 2, 4, 5, 7, 9, 11]
+
+    // MARK: - Body
+
+    var body: some View {
+        Keyboard(
+            layout: .piano(pitchRange: Pitch(36) ... Pitch(96)),
+            latching: isLatchingEnabled,
+            noteOn: handleNoteOn,
+            noteOff: handleNoteOff
+        ) { pitch, isActivated in
+            keyContent(pitch: pitch, isActivated: isActivated)
+        }
+        .environment(\.layoutDirection, .leftToRight)
+        .frame(height: 160)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Interactive piano keyboard, 61 keys")
+        .task {
+            await loadSoundFontIfNeeded()
+        }
+    }
+
+    // MARK: - Key Content
+
+    /// Custom key appearance with Devanagari labels, swar names, and dual highlighting.
+    @ViewBuilder
+    private func keyContent(pitch: Pitch, isActivated: Bool) -> some View {
+        let midi = Int(pitch.midiNoteNumber)
+        let noteIndex = ((midi - 60) % 12 + 12) % 12
+        let isNatural = Self.naturalOffsets.contains(noteIndex)
+        let highlight = highlightColor(for: midi)
+        let hasHighlight = highlight != nil || isActivated
+
+        ZStack {
+            keyShape(isNatural: isNatural, highlight: highlight, isActivated: isActivated)
+            if isNatural {
+                whiteKeyLabels(midi: midi, noteIndex: noteIndex, hasHighlight: hasHighlight)
+            }
+        }
+        .scaleEffect(hasHighlight && !reduceMotion ? (isNatural ? 1.04 : 1.06) : 1.0)
+        .animation(
+            reduceMotion ? nil : .spring(response: 0.25, dampingFraction: 0.7),
+            value: hasHighlight
+        )
+        .accessibilityLabel(keyAccessibilityLabel(midi: midi, noteIndex: noteIndex))
+        .accessibilityHint(isActivated ? "Currently playing" : "Double tap to play")
+    }
+
+    /// Key background shape (white rounded rect or black bottom-rounded rect).
+    @ViewBuilder
+    private func keyShape(isNatural: Bool, highlight: Color?, isActivated: Bool) -> some View {
+        if isNatural {
+            RoundedRectangle(cornerRadius: 3)
+                .fill(keyBackgroundColor(isNatural: true, highlight: highlight, isActivated: isActivated))
+                .shadow(color: .black.opacity(0.1), radius: 1, y: 1)
+            RoundedRectangle(cornerRadius: 3)
+                .stroke(Color.gray.opacity(0.25), lineWidth: 0.5)
+        } else {
+            UnevenRoundedRectangle(bottomLeadingRadius: 3, bottomTrailingRadius: 3)
+                .fill(keyBackgroundColor(isNatural: false, highlight: highlight, isActivated: isActivated))
+                .shadow(color: .black.opacity(0.3), radius: 2, y: 2)
+        }
+    }
+
+    /// Labels for white keys: Western name, octave number on C keys, and Devanagari.
+    private func whiteKeyLabels(midi: Int, noteIndex: Int, hasHighlight: Bool) -> some View {
+        VStack(spacing: 1) {
+            Spacer()
+            let octave = Int(floor(Double(midi - 60) / 12.0)) + 4
+            let westernName = Self.westernNames[noteIndex]
+            if noteIndex == 0 {
+                Text(verbatim: "\(westernName)\(octave)")
+                    .font(.system(size: 11, weight: hasHighlight ? .bold : .semibold))
+                    .foregroundStyle(hasHighlight ? .white : .primary)
+            } else {
+                Text(verbatim: westernName)
+                    .font(.system(size: 11, weight: hasHighlight ? .bold : .regular))
+                    .foregroundStyle(hasHighlight ? .white : .primary)
+            }
+            Text(verbatim: Self.devanagariLabels[noteIndex])
+                .font(.system(size: 9))
+                .foregroundStyle(hasHighlight ? .white.opacity(0.9) : .secondary)
+            Spacer().frame(height: 6)
+        }
+    }
+
+    // MARK: - Highlighting Logic
+
+    /// Determine the highlight color for a key based on detection and touch state.
+    ///
+    /// - Returns: Blue for detection-only, green for touch-only, cyan for both, nil for none.
+    private func highlightColor(for midiNote: Int) -> Color? {
+        let isDetected = activeMidiNotes.contains(midiNote)
+        let isTouched = touchedMidiNotes.contains(midiNote)
+
+        switch (isDetected, isTouched) {
+        case (true, true): return .cyan
+        case (true, false): return .blue
+        case (false, true): return .green
+        case (false, false): return nil
+        }
+    }
+
+    /// Compute the background fill color for a key.
+    private func keyBackgroundColor(isNatural: Bool, highlight: Color?, isActivated: Bool) -> Color {
+        if let highlight {
+            return highlight
+        }
+        if isActivated {
+            return .green
+        }
+        return isNatural ? .white : Color(white: 0.12)
+    }
+
+    // MARK: - Callbacks
+
+    /// Handle noteOn from AudioKit Keyboard.
+    private func handleNoteOn(_ pitch: Pitch, _ point: CGPoint) {
+        let midi = UInt8(clamping: Int(pitch.midiNoteNumber))
+        touchedMidiNotes.insert(Int(midi))
+        SoundFontManager.shared.playNote(midiNote: midi, velocity: 100)
+    }
+
+    /// Handle noteOff from AudioKit Keyboard.
+    private func handleNoteOff(_ pitch: Pitch) {
+        let midi = UInt8(clamping: Int(pitch.midiNoteNumber))
+        touchedMidiNotes.remove(Int(midi))
+        SoundFontManager.shared.stopNote(midiNote: midi)
+    }
+
+    /// Clear all latched notes, stopping their audio.
+    func clearAllLatched() {
+        for midi in touchedMidiNotes {
+            SoundFontManager.shared.stopNote(midiNote: UInt8(clamping: midi))
+        }
+        touchedMidiNotes.removeAll()
+    }
+
+    // MARK: - SoundFont Loading
+
+    /// Eagerly load the bundled piano SoundFont on first appearance.
+    private func loadSoundFontIfNeeded() async {
+        guard !isSoundFontLoaded else { return }
+        do {
+            try SoundFontManager.shared.loadBundledPiano()
+            isSoundFontLoaded = true
+        } catch {
+            // Non-fatal: keyboard touch will still work, just no sound
+            isSoundFontLoaded = false
+        }
+    }
+
+    // MARK: - Accessibility
+
+    /// Generate VoiceOver label for a key.
+    private func keyAccessibilityLabel(midi: Int, noteIndex: Int) -> String {
+        let octave = Int(floor(Double(midi - 60) / 12.0)) + 4
+        let westernName = Self.westernNames[noteIndex]
+        let swar = Swar.allCases[noteIndex]
+        return "\(westernName)\(octave), \(AccessibilityHelper.swarLabel(for: swar.rawValue))"
+    }
+}
+
+// MARK: - Previews
+
+#Preview("Interactive Piano — Idle") {
+    InteractivePianoView(
+        activeMidiNotes: [],
+        activeCentsOffset: 0
+    )
+    .padding(.vertical)
+}
+
+#Preview("Interactive Piano — C4 Detected") {
+    InteractivePianoView(
+        activeMidiNotes: [60],
+        activeCentsOffset: 2
+    )
+    .padding(.vertical)
+}
+
+#Preview("Interactive Piano — Latching Mode") {
+    InteractivePianoView(
+        activeMidiNotes: [60, 64, 67],
+        activeCentsOffset: 0,
+        isLatchingEnabled: true
+    )
+    .padding(.vertical)
+}

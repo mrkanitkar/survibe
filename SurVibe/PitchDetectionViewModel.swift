@@ -122,6 +122,9 @@ final class PitchDetectionViewModel {
         isListening = true
         detectionCount = 0
 
+        // Connect visualization adapter to mainMixerNode (coexists with mic tap on inputNode)
+        try? AudioNodeAdapter.shared.connect()
+
         let context = prepareTapContext()
         let tapInstalled = AudioEngineManager.shared.installMicTap(
             handler: buildMicTapHandler(context: context)
@@ -144,6 +147,7 @@ final class PitchDetectionViewModel {
     func stopListening() {
         stopFlag?.set()
         stopFlag = nil
+        AudioNodeAdapter.shared.disconnect()
         AudioEngineManager.shared.removeMicTap()
         AudioEngineManager.shared.stop()
         isListening = false
@@ -294,13 +298,14 @@ private extension PitchDetectionViewModel {
         amplitude: Double, mode: DetectionMode, refPitch: Double
     ) -> DSPResult? {
         guard mode == .melody || mode == .both, amplitude > 0.002 else { return nil }
-        let freq = PitchDSP.detectPitch(samples: samples, sampleRate: sampleRate)
-        guard freq > 0,
-              let (name, oct, cents) = try? SwarUtility.frequencyToNote(freq, referencePitch: refPitch)
+        let detection = PitchDSP.detectPitchWithConfidence(samples: samples, sampleRate: sampleRate)
+        guard detection.frequency > 0,
+              let (name, oct, cents) = try? SwarUtility.frequencyToNote(
+                  detection.frequency, referencePitch: refPitch)
         else { return nil }
-        return DSPResult(amplitude: amplitude, frequency: freq, noteName: name,
+        return DSPResult(amplitude: amplitude, frequency: detection.frequency, noteName: name,
                          westernName: SwarUtility.westernName(for: name),
-                         octave: oct, cents: cents, confidence: min(1.0, amplitude * 2.0))
+                         octave: oct, cents: cents, confidence: detection.confidence)
     }
 
     /// FFT chromagram chord detection. Returns nil if not in chord mode.
@@ -394,6 +399,12 @@ private final class AtomicCounter: Sendable {
 
 /// Stateless DSP functions for pitch detection. Safe to call from any thread.
 enum PitchDSP {
+    /// Result of pitch detection with spectral confidence.
+    struct DetectionResult {
+        let frequency: Double
+        let confidence: Double
+    }
+
     /// Calculate RMS amplitude from audio samples.
     static func calculateRMS(_ samples: [Float]) -> Double {
         var rms: Float = 0
@@ -410,23 +421,38 @@ enum PitchDSP {
     ///
     /// Computes dot products at each lag, finds peaks, applies octave correction,
     /// and refines with parabolic interpolation for sub-sample accuracy.
+    /// Returns frequency only; use `detectPitchWithConfidence` for spectral confidence.
     static func detectPitch(samples: [Float], sampleRate: Double) -> Double {
+        detectPitchWithConfidence(samples: samples, sampleRate: sampleRate).frequency
+    }
+
+    /// Pitch detection with spectral confidence using peak-to-sidelobe ratio.
+    ///
+    /// Returns both the detected frequency and a spectral confidence value (0.0–1.0)
+    /// derived from the autocorrelation peak prominence rather than raw amplitude.
+    static func detectPitchWithConfidence(samples: [Float], sampleRate: Double) -> DetectionResult {
         let frameCount = samples.count
-        guard frameCount > 4 else { return 0 }
+        guard frameCount > 4 else { return DetectionResult(frequency: 0, confidence: 0) }
         let maxLag = frameCount / 2
         var ac = computeAutocorrelation(samples: samples, maxLag: maxLag)
-        guard ac[0] > 0 else { return 0 }
+        guard ac[0] > 0 else { return DetectionResult(frequency: 0, confidence: 0) }
         normalizeInPlace(&ac, maxLag: maxLag)
         let minLag = max(2, Int(sampleRate / 4000.0))
-        guard minLag < maxLag else { return 0 }
+        guard minLag < maxLag else { return DetectionResult(frequency: 0, confidence: 0) }
         let peaks = findPeaks(in: ac, minLag: minLag, maxLag: maxLag)
-        guard let firstPeak = peaks.first else { return 0 }
+        guard let firstPeak = peaks.first else { return DetectionResult(frequency: 0, confidence: 0) }
         let best = correctForOctaveError(firstPeak: firstPeak, allPeaks: peaks)
-        guard best.value > 0.15 else { return 0 }
+        guard best.value > 0.15 else { return DetectionResult(frequency: 0, confidence: 0) }
         let refined = refine(lag: best.lag, ac: ac, maxLag: maxLag)
-        guard refined > 0 else { return 0 }
+        guard refined > 0 else { return DetectionResult(frequency: 0, confidence: 0) }
         let freq = sampleRate / refined
-        return (freq > 50 && freq < 4000) ? freq : 0
+        guard freq > 50 && freq < 4000 else { return DetectionResult(frequency: 0, confidence: 0) }
+
+        // Compute spectral confidence from autocorrelation peak prominence
+        let confidence = SpectralConfidence.compute(
+            autocorrelation: ac, bestLag: best.lag, minLag: minLag
+        )
+        return DetectionResult(frequency: freq, confidence: confidence)
     }
 
     /// Compute raw autocorrelation via vDSP dot products.

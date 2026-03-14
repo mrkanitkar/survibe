@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 import Testing
 
@@ -83,9 +84,9 @@ struct Day05SargamColorMapTests {
 @Suite("Day 5 — NotationDisplayMode Tests")
 struct Day05NotationDisplayModeTests {
 
-    @Test("NotationDisplayMode has exactly 3 cases")
+    @Test("NotationDisplayMode has exactly 5 cases")
     func caseCount() {
-        #expect(NotationDisplayMode.allCases.count == 3)
+        #expect(NotationDisplayMode.allCases.count == 5)
     }
 
     @Test("NotationDisplayMode cases have correct raw values")
@@ -125,23 +126,22 @@ struct Day05NotationDisplayModeTests {
 // MARK: - SargamFadeManager Tests
 
 @Suite("Day 5 — SargamFadeManager Tests")
-@MainActor
 struct Day05SargamFadeManagerTests {
 
     @Test("Initial opacity is 1.0")
-    func initialOpacity() {
+    @MainActor func initialOpacity() {
         let manager = SargamFadeManager()
         #expect(manager.labelOpacity == 1.0)
     }
 
     @Test("Initial accuracy is 1.0")
-    func initialAccuracy() {
+    @MainActor func initialAccuracy() {
         let manager = SargamFadeManager()
         #expect(manager.currentAccuracy == 1.0)
     }
 
     @Test("High accuracy (>90%) yields full opacity")
-    func highAccuracyFullOpacity() {
+    @MainActor func highAccuracyFullOpacity() {
         let manager = SargamFadeManager()
         manager.updateOpacity(accuracy: 0.95)
         #expect(manager.labelOpacity == 1.0)
@@ -149,56 +149,56 @@ struct Day05SargamFadeManagerTests {
     }
 
     @Test("Perfect accuracy (1.0) yields full opacity")
-    func perfectAccuracyFullOpacity() {
+    @MainActor func perfectAccuracyFullOpacity() {
         let manager = SargamFadeManager()
         manager.updateOpacity(accuracy: 1.0)
         #expect(manager.labelOpacity == 1.0)
     }
 
     @Test("Accuracy at 90% boundary yields full opacity")
-    func boundaryNinetyPercent() {
+    @MainActor func boundaryNinetyPercent() {
         let manager = SargamFadeManager()
         manager.updateOpacity(accuracy: 0.9)
         #expect(manager.labelOpacity == 1.0)
     }
 
     @Test("Moderate accuracy (70-90%) yields 0.7 opacity")
-    func moderateAccuracyOpacity() {
+    @MainActor func moderateAccuracyOpacity() {
         let manager = SargamFadeManager()
         manager.updateOpacity(accuracy: 0.8)
         #expect(manager.labelOpacity == 0.7)
     }
 
     @Test("Accuracy at 70% boundary yields 0.7 opacity")
-    func boundarySeventyPercent() {
+    @MainActor func boundarySeventyPercent() {
         let manager = SargamFadeManager()
         manager.updateOpacity(accuracy: 0.7)
         #expect(manager.labelOpacity == 0.7)
     }
 
     @Test("Low accuracy (50-70%) yields 0.5 opacity")
-    func lowAccuracyOpacity() {
+    @MainActor func lowAccuracyOpacity() {
         let manager = SargamFadeManager()
         manager.updateOpacity(accuracy: 0.6)
         #expect(manager.labelOpacity == 0.5)
     }
 
     @Test("Very low accuracy (<50%) yields 0.25 opacity")
-    func veryLowAccuracyOpacity() {
+    @MainActor func veryLowAccuracyOpacity() {
         let manager = SargamFadeManager()
         manager.updateOpacity(accuracy: 0.3)
         #expect(manager.labelOpacity == 0.25)
     }
 
     @Test("Zero accuracy yields 0.25 opacity")
-    func zeroAccuracyOpacity() {
+    @MainActor func zeroAccuracyOpacity() {
         let manager = SargamFadeManager()
         manager.updateOpacity(accuracy: 0.0)
         #expect(manager.labelOpacity == 0.25)
     }
 
     @Test("Accuracy above 1.0 is clamped to 1.0")
-    func overflowAccuracyClamped() {
+    @MainActor func overflowAccuracyClamped() {
         let manager = SargamFadeManager()
         manager.updateOpacity(accuracy: 1.5)
         #expect(manager.currentAccuracy == 1.0)
@@ -206,7 +206,7 @@ struct Day05SargamFadeManagerTests {
     }
 
     @Test("Negative accuracy is clamped to 0.0")
-    func negativeAccuracyClamped() {
+    @MainActor func negativeAccuracyClamped() {
         let manager = SargamFadeManager()
         manager.updateOpacity(accuracy: -0.5)
         #expect(manager.currentAccuracy == 0.0)
@@ -214,7 +214,7 @@ struct Day05SargamFadeManagerTests {
     }
 
     @Test("Reset restores full opacity and accuracy")
-    func resetRestoresDefaults() {
+    @MainActor func resetRestoresDefaults() {
         let manager = SargamFadeManager()
         manager.updateOpacity(accuracy: 0.3)
         #expect(manager.labelOpacity == 0.25)

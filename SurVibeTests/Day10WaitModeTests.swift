@@ -74,9 +74,8 @@ struct WaitModeConfigurationTests {
 
 // MARK: - WaitModeEngine Tests
 
-@MainActor
 struct WaitModeEngineTests {
-    @Test func initialStateIsIdle() {
+    @Test @MainActor func initialStateIsIdle() {
         let engine = WaitModeEngine()
 
         #expect(engine.state == .idle)
@@ -85,7 +84,7 @@ struct WaitModeEngineTests {
         #expect(engine.totalAttempts == 0)
     }
 
-    @Test func waitForNoteTransitionsToWaiting() {
+    @Test @MainActor func waitForNoteTransitionsToWaiting() {
         let engine = WaitModeEngine(
             configuration: WaitModeConfiguration(patienceSeconds: 0)
         )
@@ -95,7 +94,7 @@ struct WaitModeEngineTests {
         #expect(engine.state == .waiting)
     }
 
-    @Test func correctAttemptTransitionsToAdvancing() {
+    @Test @MainActor func correctAttemptTransitionsToAdvancing() {
         let engine = WaitModeEngine(
             configuration: WaitModeConfiguration(patienceSeconds: 0)
         )
@@ -112,7 +111,7 @@ struct WaitModeEngineTests {
         #expect(engine.state == .advancing)
     }
 
-    @Test func correctAttemptReturnsTrue() {
+    @Test @MainActor func correctAttemptReturnsTrue() {
         let engine = WaitModeEngine(
             configuration: WaitModeConfiguration(patienceSeconds: 0)
         )
@@ -129,7 +128,7 @@ struct WaitModeEngineTests {
         #expect(result == true)
     }
 
-    @Test func incorrectAttemptStaysInWaitingAndReturnsFalse() {
+    @Test @MainActor func incorrectAttemptStaysInWaitingAndReturnsFalse() {
         let engine = WaitModeEngine(
             configuration: WaitModeConfiguration(patienceSeconds: 0)
         )
@@ -147,7 +146,7 @@ struct WaitModeEngineTests {
         #expect(engine.state == .waiting)
     }
 
-    @Test func skipCurrentNoteTransitionsToSkippedAndIncrementsCount() {
+    @Test @MainActor func skipCurrentNoteTransitionsToSkippedAndIncrementsCount() {
         let engine = WaitModeEngine(
             configuration: WaitModeConfiguration(patienceSeconds: 0)
         )
@@ -159,7 +158,7 @@ struct WaitModeEngineTests {
         #expect(engine.skippedCount == 1)
     }
 
-    @Test func skipCurrentNoteOnlyWorksFromWaitingState() {
+    @Test @MainActor func skipCurrentNoteOnlyWorksFromWaitingState() {
         let engine = WaitModeEngine(
             configuration: WaitModeConfiguration(patienceSeconds: 0)
         )
@@ -185,7 +184,7 @@ struct WaitModeEngineTests {
         #expect(engine.skippedCount == 0)
     }
 
-    @Test func resetReturnsToIdleAndZeroesAllCounters() {
+    @Test @MainActor func resetReturnsToIdleAndZeroesAllCounters() {
         let engine = WaitModeEngine(
             configuration: WaitModeConfiguration(patienceSeconds: 0)
         )
@@ -211,7 +210,7 @@ struct WaitModeEngineTests {
         #expect(engine.totalAttempts == 0)
     }
 
-    @Test func correctOnFirstAttemptIncrementsOnFirstCorrectTry() {
+    @Test @MainActor func correctOnFirstAttemptIncrementsOnFirstCorrectTry() {
         let engine = WaitModeEngine(
             configuration: WaitModeConfiguration(patienceSeconds: 0)
         )
@@ -228,7 +227,7 @@ struct WaitModeEngineTests {
         #expect(engine.correctOnFirstAttempt == 1)
     }
 
-    @Test func correctOnFirstAttemptDoesNotIncrementAfterIncorrectAttempt() {
+    @Test @MainActor func correctOnFirstAttemptDoesNotIncrementAfterIncorrectAttempt() {
         let engine = WaitModeEngine(
             configuration: WaitModeConfiguration(patienceSeconds: 0)
         )
@@ -256,7 +255,7 @@ struct WaitModeEngineTests {
         #expect(engine.state == .advancing)
     }
 
-    @Test func totalAttemptsIncrementsOnEveryEvaluateAttemptCall() {
+    @Test @MainActor func totalAttemptsIncrementsOnEveryEvaluateAttemptCall() {
         let engine = WaitModeEngine(
             configuration: WaitModeConfiguration(patienceSeconds: 0)
         )
@@ -288,7 +287,7 @@ struct WaitModeEngineTests {
         #expect(engine.totalAttempts == 3)
     }
 
-    @Test func evaluateAttemptReturnsFalseWhenNotInWaitingState() {
+    @Test @MainActor func evaluateAttemptReturnsFalseWhenNotInWaitingState() {
         let engine = WaitModeEngine(
             configuration: WaitModeConfiguration(patienceSeconds: 0)
         )
@@ -329,9 +328,8 @@ struct WaitModeEngineTests {
 
 // MARK: - Pitch Tolerance Tests (via WaitModeEngine)
 
-@MainActor
 struct PitchToleranceTests {
-    @Test func noteWithinToleranceIsCorrect() {
+    @Test @MainActor func noteWithinToleranceIsCorrect() {
         let config = WaitModeConfiguration(
             isEnabled: true,
             waitCriteria: .withinTolerance,
@@ -353,7 +351,7 @@ struct PitchToleranceTests {
         #expect(engine.state == .advancing)
     }
 
-    @Test func noteOutsideToleranceIsIncorrect() {
+    @Test @MainActor func noteOutsideToleranceIsIncorrect() {
         let config = WaitModeConfiguration(
             isEnabled: true,
             waitCriteria: .withinTolerance,
@@ -375,7 +373,7 @@ struct PitchToleranceTests {
         #expect(engine.state == .waiting)
     }
 
-    @Test func noteAtExactBoundaryIsCorrect() {
+    @Test @MainActor func noteAtExactBoundaryIsCorrect() {
         let config = WaitModeConfiguration(
             isEnabled: true,
             waitCriteria: .withinTolerance,
@@ -397,7 +395,7 @@ struct PitchToleranceTests {
         #expect(engine.state == .advancing)
     }
 
-    @Test func noteNameMismatchEvenWithinToleranceIsIncorrect() {
+    @Test @MainActor func noteNameMismatchEvenWithinToleranceIsIncorrect() {
         let config = WaitModeConfiguration(
             isEnabled: true,
             waitCriteria: .withinTolerance,
@@ -419,7 +417,7 @@ struct PitchToleranceTests {
         #expect(engine.state == .waiting)
     }
 
-    @Test func negativeCentsOffsetWithinToleranceIsCorrect() {
+    @Test @MainActor func negativeCentsOffsetWithinToleranceIsCorrect() {
         let config = WaitModeConfiguration(
             isEnabled: true,
             waitCriteria: .withinTolerance,

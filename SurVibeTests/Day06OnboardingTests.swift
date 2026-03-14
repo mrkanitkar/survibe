@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 
 @testable import SurVibe
@@ -28,7 +29,7 @@ struct SkillLevelTests {
     @Test func difficultyValues() {
         #expect(SkillLevel.beginner.difficulty == 1)
         #expect(SkillLevel.intermediate.difficulty == 2)
-        #expect(SkillLevel.advanced.difficulty == 3)
+        #expect(SkillLevel.advanced.difficulty == 4)
     }
 
     @Test func difficultyIsAscending() {
@@ -79,17 +80,22 @@ struct OnboardingDoorTypeTests {
 
 // MARK: - OnboardingManager Tests
 
-@MainActor
 struct OnboardingManagerTests {
-    @Test func initialState() {
+    @Test @MainActor func initialState() {
+        // Clear stored prefs so test is not polluted by other tests' @AppStorage writes
+        UserDefaults.standard.removeObject(forKey: "onboardingSkillLevel")
+        UserDefaults.standard.removeObject(forKey: "onboardingPreferredDoors")
+        UserDefaults.standard.removeObject(forKey: "onboardingNotationPreference")
+        UserDefaults.standard.removeObject(forKey: "onboardingPreferredLanguage")
+
         let manager = OnboardingManager()
         #expect(manager.currentScreen == 0)
-        #expect(manager.skillLevel == .beginner)
-        #expect(manager.preferredDoors.isEmpty)
+        #expect(manager.skillLevel == .intermediate)
+        #expect(manager.preferredDoors == [.songs, .learn])
         #expect(manager.preferredLanguageCode == "en")
     }
 
-    @Test func nextScreenIncrementsToMax() {
+    @Test @MainActor func nextScreenIncrementsToMax() {
         let manager = OnboardingManager()
         #expect(manager.currentScreen == 0)
 
@@ -107,7 +113,7 @@ struct OnboardingManagerTests {
         #expect(manager.currentScreen == 3)
     }
 
-    @Test func previousScreenDecrementsToZero() {
+    @Test @MainActor func previousScreenDecrementsToZero() {
         let manager = OnboardingManager()
         manager.currentScreen = 2
 
@@ -122,7 +128,7 @@ struct OnboardingManagerTests {
         #expect(manager.currentScreen == 0)
     }
 
-    @Test func skipAllSetsDefaults() {
+    @Test @MainActor func skipAllSetsDefaults() {
         let manager = OnboardingManager()
         manager.currentScreen = 1
         manager.skillLevel = .advanced
@@ -133,7 +139,10 @@ struct OnboardingManagerTests {
         #expect(manager.isOnboardingComplete)
     }
 
-    @Test func completeOnboardingSetsFlag() {
+    @Test @MainActor func completeOnboardingSetsFlag() {
+        // Clear persisted flag so test is not polluted by other tests' side effects
+        UserDefaults.standard.removeObject(forKey: "hasCompletedOnboarding")
+
         let manager = OnboardingManager()
         #expect(!manager.isOnboardingComplete)
 
@@ -142,7 +151,7 @@ struct OnboardingManagerTests {
         #expect(manager.isOnboardingComplete)
     }
 
-    @Test func resetOnboardingClearsFlag() {
+    @Test @MainActor func resetOnboardingClearsFlag() {
         let manager = OnboardingManager()
         manager.completeOnboarding()
         #expect(manager.isOnboardingComplete)

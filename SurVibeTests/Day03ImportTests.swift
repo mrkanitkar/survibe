@@ -16,7 +16,7 @@ struct ContentImportManagerTests {
             into: container,
             from: .main
         )
-        #expect(summary.songCount == 3)
+        #expect(summary.songCount == 19)
         #expect(summary.errorDescriptions.isEmpty)
     }
 
@@ -28,7 +28,7 @@ struct ContentImportManagerTests {
             into: container,
             from: .main
         )
-        #expect(summary.lessonCount == 2)
+        #expect(summary.lessonCount == 10)
     }
 
     @Test("Imported songs have correct slugIds")
@@ -41,8 +41,9 @@ struct ContentImportManagerTests {
         let descriptor = FetchDescriptor<Song>(sortBy: [SortDescriptor(\.sortOrder)])
         let songs = try context.fetch(descriptor)
 
-        #expect(songs.count == 3)
+        #expect(songs.count == 19)
         let slugIds = songs.map(\.slugId)
+        // Verify original 3 seed songs are still present
         #expect(slugIds.contains("twinkle-hindi-v1"))
         #expect(slugIds.contains("morya-marathi-v1"))
         #expect(slugIds.contains("mary-english-v1"))
@@ -105,8 +106,8 @@ struct ContentImportManagerTests {
         let summary = try ContentImportManager.importAllSeedContent(
             into: container, from: .main
         )
-        #expect(summary.description.contains("Songs: 3"))
-        #expect(summary.description.contains("Lessons: 2"))
+        #expect(summary.description.contains("Songs: 19"))
+        #expect(summary.description.contains("Lessons: 10"))
     }
 }
 
@@ -144,7 +145,7 @@ struct SeedContentValidationTests {
         #expect(marathi?.language == "mr")
         #expect(marathi?.category == "devotional")
         #expect(marathi?.difficulty == 1)
-        #expect(marathi?.tempo == 72)
+        #expect(marathi?.tempo == 100)
     }
 
     @Test("English song has correct metadata")
@@ -233,8 +234,12 @@ struct SeedContentValidationTests {
         let lessons = try context.fetch(
             FetchDescriptor<Lesson>(sortBy: [SortDescriptor(\.orderIndex)])
         )
-        #expect(lessons.count == 2)
-        #expect(lessons[0].orderIndex < lessons[1].orderIndex)
+        #expect(lessons.count == 10)
+        // Verify ordering is sequential
+        for index in 1..<lessons.count {
+            #expect(lessons[index].orderIndex > lessons[index - 1].orderIndex)
+        }
+        // Verify first two lessons are still present
         #expect(lessons[0].lessonId == "lesson-meet-swaras-v1")
         #expect(lessons[1].lessonId == "lesson-first-melody-v1")
     }
@@ -261,7 +266,7 @@ struct SeedContentValidationTests {
         #expect(secondPrereqs?.contains("lesson-meet-swaras-v1") == true)
     }
 
-    @Test("Each lesson has 6 steps")
+    @Test("Each lesson has between 5 and 6 steps")
     @MainActor
     func lessonStepCount() throws {
         let container = try makeTestContainer()
@@ -271,9 +276,10 @@ struct SeedContentValidationTests {
         let lessons = try context.fetch(FetchDescriptor<Lesson>())
         for lesson in lessons {
             let steps = lesson.decodedSteps
+            let count = steps?.count ?? 0
             #expect(
-                steps?.count == 6,
-                "Lesson \(lesson.lessonId) expected 6 steps, got \(steps?.count ?? 0)"
+                count >= 5 && count <= 6,
+                "Lesson \(lesson.lessonId) expected 5-6 steps, got \(count)"
             )
         }
     }

@@ -106,35 +106,27 @@ struct Day04SongPlaybackEngineTests {
     }
 
     @MainActor
-    @Test("SongPlaybackEngine load with nil midiData transitions to error")
+    @Test("SongPlaybackEngine load with nil midiData stays idle (notation-only mode)")
     func loadNilMidiData() async {
         let engine = SongPlaybackEngine()
         let song = Song()
         song.midiData = nil
         await engine.load(song: song)
-        if case .error = engine.playbackState {
-            // Expected — nil data causes MIDIParser to return .invalidHeader
-        } else {
-            Issue.record(
-                "Expected .error state after loading nil midiData, got \(engine.playbackState)"
-            )
-        }
+        // Nil MIDI data enters notation-only mode — engine stays idle, no error
+        #expect(engine.playbackState == .idle,
+                "Expected .idle (notation-only mode) for nil midiData, got \(engine.playbackState)")
     }
 
     @MainActor
-    @Test("SongPlaybackEngine load with empty midiData transitions to error")
+    @Test("SongPlaybackEngine load with empty midiData stays idle (notation-only mode)")
     func loadEmptyMidiData() async {
         let engine = SongPlaybackEngine()
         let song = Song()
         song.midiData = Data()
         await engine.load(song: song)
-        if case .error = engine.playbackState {
-            // Expected — empty data fails header validation
-        } else {
-            Issue.record(
-                "Expected .error state after loading empty midiData, got \(engine.playbackState)"
-            )
-        }
+        // Empty MIDI data enters notation-only mode — engine stays idle, no error
+        #expect(engine.playbackState == .idle,
+                "Expected .idle (notation-only mode) for empty midiData, got \(engine.playbackState)")
     }
 
     @MainActor

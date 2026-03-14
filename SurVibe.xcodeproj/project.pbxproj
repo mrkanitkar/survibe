@@ -19,6 +19,8 @@
 		A961E7632F5F8FD400B3333D /* .gitignore in Resources */ = {isa = PBXBuildFile; fileRef = A961E7622F5F8FD400B3333D /* .gitignore */; };
 		A963E5A32F6093460084D5D5 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = A963E5A22F6093460084D5D5 /* Localizable.xcstrings */; };
 		A963E5A52F6093470084D5D5 /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = A963E5A42F6093470084D5D5 /* InfoPlist.xcstrings */; };
+		A9FD987C2F64BB5800D4A811 /* Keyboard in Frameworks */ = {isa = PBXBuildFile; productRef = A9FD987B2F64BB5800D4A811 /* Keyboard */; };
+		A9FD987E2F64BB6900D4A811 /* AudioKitUI in Frameworks */ = {isa = PBXBuildFile; productRef = A9FD987D2F64BB6900D4A811 /* AudioKitUI */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -86,6 +88,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				A961E7552F5F83EB00B3333D /* SVAdvanced in Frameworks */,
+				A9FD987E2F64BB6900D4A811 /* AudioKitUI in Frameworks */,
+				A9FD987C2F64BB5800D4A811 /* Keyboard in Frameworks */,
 				A961E7462F5F839100B3333D /* SVAudio in Frameworks */,
 				A961E7492F5F83A100B3333D /* SVLearning in Frameworks */,
 				A961E74F2F5F83C400B3333D /* SVSocial in Frameworks */,
@@ -124,6 +128,7 @@
 				A961E7622F5F8FD400B3333D /* .gitignore */,
 				A963E5A22F6093460084D5D5 /* Localizable.xcstrings */,
 				A963E5A42F6093470084D5D5 /* InfoPlist.xcstrings */,
+				A9FD987A2F64BB5800D4A811 /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
@@ -135,6 +140,13 @@
 				A961E72D2F5F808100B3333D /* SurVibeUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		A9FD987A2F64BB5800D4A811 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -164,6 +176,8 @@
 				A961E74E2F5F83C400B3333D /* SVSocial */,
 				A961E7512F5F83D400B3333D /* SVBilling */,
 				A961E7542F5F83EB00B3333D /* SVAdvanced */,
+				A9FD987B2F64BB5800D4A811 /* Keyboard */,
+				A9FD987D2F64BB6900D4A811 /* AudioKitUI */,
 			);
 			productName = SurVibe;
 			productReference = A961E7122F5F808000B3333D /* SurVibe.app */;
@@ -277,6 +291,8 @@
 				A961E74D2F5F83C400B3333D /* XCLocalSwiftPackageReference "Packages/SVSocial" */,
 				A961E7502F5F83D400B3333D /* XCLocalSwiftPackageReference "Packages/SVBilling" */,
 				A961E7532F5F83EB00B3333D /* XCLocalSwiftPackageReference "Packages/SVAdvanced" */,
+				A9FD98712F64B86C00D4A811 /* XCRemoteSwiftPackageReference "Keyboard" */,
+				A9FD98722F64B89D00D4A811 /* XCRemoteSwiftPackageReference "AudioKitUI" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = A961E7132F5F808000B3333D /* Products */;
@@ -706,6 +722,25 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		A9FD98712F64B86C00D4A811 /* XCRemoteSwiftPackageReference "Keyboard" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/AudioKit/Keyboard";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.4.1;
+			};
+		};
+		A9FD98722F64B89D00D4A811 /* XCRemoteSwiftPackageReference "AudioKitUI" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/AudioKit/AudioKitUI";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.3.7;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
 		A961E7422F5F837700B3333D /* SVCore */ = {
 			isa = XCSwiftPackageProductDependency;
@@ -734,6 +769,16 @@
 		A961E7542F5F83EB00B3333D /* SVAdvanced */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = SVAdvanced;
+		};
+		A9FD987B2F64BB5800D4A811 /* Keyboard */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A9FD98712F64B86C00D4A811 /* XCRemoteSwiftPackageReference "Keyboard" */;
+			productName = Keyboard;
+		};
+		A9FD987D2F64BB6900D4A811 /* AudioKitUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A9FD98722F64B89D00D4A811 /* XCRemoteSwiftPackageReference "AudioKitUI" */;
+			productName = AudioKitUI;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

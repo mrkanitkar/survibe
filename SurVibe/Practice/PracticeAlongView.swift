@@ -87,12 +87,19 @@ struct PracticeAlongView: View {
 
     /// A single note cell in the horizontal notation strip.
     ///
+    /// Highlights the cell when the detected pitch matches this note's swar name
+    /// and octave. Shows a colored border (green/orange/red) based on tuning
+    /// accuracy and a compact cents badge overlay.
+    ///
     /// - Parameters:
     ///   - index: Position in the sargam notes array.
     ///   - note: The sargam note to display.
     /// - Returns: A styled VStack for this note.
     private func noteCell(index: Int, note: SargamNote) -> some View {
-        VStack(spacing: 4) {
+        let isDetected = isNoteDetected(note)
+        let detectedCentsValue = isDetected ? (viewModel.currentPitch?.centsOffset ?? 0) : 0
+
+        return VStack(spacing: 4) {
             Text(noteDisplayName(note))
                 .font(.body.monospaced())
                 .fontWeight(
@@ -120,6 +127,18 @@ struct PracticeAlongView: View {
                     .fill(viewModel.noteScores[index].grade.color.opacity(0.1))
             }
         }
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(
+                    isDetected ? detectionAccuracyColor(detectedCentsValue) : .clear,
+                    lineWidth: isDetected ? 3 : 0
+                )
+        )
+        .overlay(alignment: .topTrailing) {
+            if isDetected {
+                detectionCentsBadge(cents: detectedCentsValue)
+            }
+        }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(noteCellAccessibilityLabel(index: index, note: note))
     }
@@ -133,17 +152,32 @@ struct PracticeAlongView: View {
                         Text("Detected")
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                        Text(pitch.noteName)
-                            .font(.title2.bold())
+                        HStack(spacing: 6) {
+                            Text(pitch.noteName)
+                                .font(.title2.bold())
+
+                            // Show "Outside Raga" badge when note is not in raga
+                            if pitch.isInRaga == false {
+                                Text("Outside Raga")
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Capsule().fill(.orange))
+                                    .accessibilityLabel("Note is outside the raga")
+                            }
+                        }
                     }
 
                     VStack(alignment: .leading) {
                         Text("Cents")
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                        Text(String(format: "%+.0f", pitch.centsOffset))
+                        // Show JI cents when available, otherwise 12ET cents
+                        let displayCents = pitch.ragaCentsOffset ?? pitch.centsOffset
+                        Text(String(format: "%+.0f", displayCents))
                             .font(.title3.monospaced())
-                            .foregroundStyle(centsColor(pitch.centsOffset))
+                            .foregroundStyle(centsColor(displayCents))
                     }
 
                     VStack(alignment: .leading) {
@@ -155,11 +189,7 @@ struct PracticeAlongView: View {
                     }
                 }
                 .accessibilityElement(children: .combine)
-                .accessibilityLabel(
-                    "Detected note \(pitch.noteName), "
-                        + "\(Int(pitch.centsOffset)) cents offset, "
-                        + "\(Int(pitch.confidence * 100)) percent confidence"
-                )
+                .accessibilityLabel(pitchFeedbackAccessibilityLabel(pitch))
             } else {
                 Text("Sing or play a note...")
                     .font(.subheadline)
@@ -167,6 +197,23 @@ struct PracticeAlongView: View {
                     .accessibilityLabel("Waiting for audio input")
             }
         }
+    }
+
+    /// Build an accessibility label for the pitch feedback section.
+    ///
+    /// Includes note name, cents offset, confidence, and out-of-raga status.
+    ///
+    /// - Parameter pitch: The current pitch result.
+    /// - Returns: Descriptive label for VoiceOver.
+    private func pitchFeedbackAccessibilityLabel(_ pitch: PitchResult) -> String {
+        let displayCents = pitch.ragaCentsOffset ?? pitch.centsOffset
+        var label = "Detected note \(pitch.noteName), "
+            + "\(Int(displayCents)) cents offset, "
+            + "\(Int(pitch.confidence * 100)) percent confidence"
+        if pitch.isInRaga == false {
+            label += ", outside the raga"
+        }
+        return label
     }
 
     /// Practice session controls.
@@ -230,6 +277,48 @@ struct PracticeAlongView: View {
         return .red
     }
 
+    /// Whether the given sargam note matches the currently detected pitch.
+    ///
+    /// Compares the note's swar name and octave against the live detection.
+    ///
+    /// - Parameter note: The sargam note to check.
+    /// - Returns: `true` if the detected pitch matches this note.
+    private func isNoteDetected(_ note: SargamNote) -> Bool {
+        guard let pitch = viewModel.currentPitch,
+              pitch.amplitude >= 0.02,
+              pitch.confidence >= 0.5 else { return false }
+        return pitch.noteName == note.note && pitch.octave == note.octave
+    }
+
+    /// Color indicating pitch accuracy based on cents deviation.
+    ///
+    /// - Parameter cents: Pitch deviation in cents.
+    /// - Returns: Green (<10¢), orange (<25¢), or red (>=25¢).
+    private func detectionAccuracyColor(_ cents: Double) -> Color {
+        let absCents = abs(cents)
+        if absCents < 10 { return .green }
+        if absCents < 25 { return .orange }
+        return .red
+    }
+
+    /// Compact cents badge overlaid on detected note cells.
+    ///
+    /// - Parameter cents: Pitch deviation in cents.
+    /// - Returns: A capsule view with the formatted cents value.
+    private func detectionCentsBadge(cents: Double) -> some View {
+        let rounded = Int(cents)
+        let label = abs(rounded) < 5 ? "✓" : "\(rounded > 0 ? "+" : "")\(rounded)¢"
+
+        return Text(label)
+            .font(.system(size: 9, weight: .bold).monospacedDigit())
+            .foregroundStyle(.white)
+            .padding(.horizontal, 3)
+            .padding(.vertical, 1)
+            .background(Capsule().fill(detectionAccuracyColor(cents)))
+            .offset(x: 4, y: -4)
+            .accessibilityHidden(true)
+    }
+
     /// Build an accessibility label for a note cell.
     ///
     /// - Parameters:
@@ -240,6 +329,15 @@ struct PracticeAlongView: View {
         var label = noteDisplayName(note)
         if index == viewModel.currentPracticeNoteIndex {
             label += ", current note"
+        }
+        if isNoteDetected(note) {
+            let absCents = abs(Int(viewModel.currentPitch?.centsOffset ?? 0))
+            if absCents < 10 {
+                label += ", detected, in tune"
+            } else {
+                let direction = (viewModel.currentPitch?.centsOffset ?? 0) > 0 ? "sharp" : "flat"
+                label += ", detected, \(absCents) cents \(direction)"
+            }
         }
         if index < viewModel.noteScores.count {
             label += ", \(viewModel.noteScores[index].grade.rawValue)"

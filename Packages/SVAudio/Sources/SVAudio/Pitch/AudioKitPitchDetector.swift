@@ -175,31 +175,33 @@ public final class AudioKitPitchDetector: PitchDetectorProtocol {
             return
         }
 
-        let frequency = detectPitch(samples: samples, sampleRate: sampleRate)
+        let detection = detectPitchWithConfidence(
+            samples: samples, sampleRate: sampleRate
+        )
 
         if bufferCount % 20 == 1 {
             let ampStr = String(format: "%.4f", amplitude)
-            let freqStr = String(format: "%.1f", frequency)
+            let freqStr = String(format: "%.1f", detection.frequency)
             pitchLogger.info("DSP: amp=\(ampStr) freq=\(freqStr)")
         }
 
-        guard frequency > 0,
+        guard detection.frequency > 0,
               let (noteName, octave, cents) = try? SwarUtility.frequencyToNote(
-                  frequency, referencePitch: refPitch
+                  detection.frequency, referencePitch: refPitch
               )
         else {
             continuation.yield(silenceResult(amplitude: amplitude))
             return
         }
 
-        let confidence = min(1.0, amplitude * 2.0)
+        let confidence = detection.confidence
         let result = PitchResult(
-            frequency: frequency, amplitude: amplitude,
+            frequency: detection.frequency, amplitude: amplitude,
             noteName: noteName, octave: octave,
             centsOffset: cents, confidence: confidence
         )
         let ampStr = String(format: "%.4f", amplitude)
-        let freqStr = String(format: "%.1f", frequency)
+        let freqStr = String(format: "%.1f", detection.frequency)
         pitchLogger.info(
             "DETECTED: \(noteName)\(octave) \(freqStr)Hz amp=\(ampStr)"
         )
@@ -229,30 +231,58 @@ public final class AudioKitPitchDetector: PitchDetectorProtocol {
         return Double(rms)
     }
 
-    /// Autocorrelation-based pitch detection using Accelerate vDSP.
-    nonisolated private static func detectPitch(
+    /// Raw detection result containing frequency and spectral confidence.
+    private struct PitchDetectionResult {
+        let frequency: Double
+        let confidence: Double
+    }
+
+    /// Autocorrelation-based pitch detection with spectral confidence.
+    ///
+    /// Returns both the detected frequency and a confidence metric based on
+    /// peak-to-sidelobe ratio (via `SpectralConfidence`), replacing the
+    /// naive amplitude-based heuristic.
+    nonisolated private static func detectPitchWithConfidence(
         samples: [Float],
         sampleRate: Double
-    ) -> Double {
+    ) -> PitchDetectionResult {
         let autocorrelation = computeAutocorrelation(samples)
-        guard !autocorrelation.isEmpty else { return 0 }
+        guard !autocorrelation.isEmpty else {
+            return PitchDetectionResult(frequency: 0, confidence: 0)
+        }
 
         let halfLength = autocorrelation.count
         let minLag = max(2, Int(sampleRate / 4000.0))
-        guard minLag < halfLength else { return 0 }
+        guard minLag < halfLength else {
+            return PitchDetectionResult(frequency: 0, confidence: 0)
+        }
 
         let bestLag = findBestLag(
             autocorrelation, minLag: minLag, halfLength: halfLength
         )
-        guard bestLag > 0 else { return 0 }
+        guard bestLag > 0 else {
+            return PitchDetectionResult(frequency: 0, confidence: 0)
+        }
 
         let refinedLag = parabolicInterpolation(
             autocorrelation, lag: bestLag
         )
-        guard refinedLag > 0 else { return 0 }
+        guard refinedLag > 0 else {
+            return PitchDetectionResult(frequency: 0, confidence: 0)
+        }
 
         let frequency = sampleRate / refinedLag
-        return (frequency > 50 && frequency < 4000) ? frequency : 0
+        guard frequency > 50, frequency < 4000 else {
+            return PitchDetectionResult(frequency: 0, confidence: 0)
+        }
+
+        let confidence = SpectralConfidence.compute(
+            autocorrelation: autocorrelation,
+            bestLag: bestLag,
+            minLag: minLag
+        )
+
+        return PitchDetectionResult(frequency: frequency, confidence: confidence)
     }
 
     /// Compute normalized autocorrelation of audio samples via vDSP.

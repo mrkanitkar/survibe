@@ -65,6 +65,7 @@ private enum KeyboardLayout {
 /// Full 61-key scrollable piano keyboard (C2–C7) with multi-note highlighting.
 /// Supports both single-note (melody) and multi-note (chord) highlighting.
 /// Auto-scrolls to the lowest detected note when the octave changes.
+@available(*, deprecated, message: "Use InteractivePianoView instead")
 struct PianoKeyboardView: View {
     /// Set of MIDI note numbers currently detected (36–96), empty if none.
     let activeMidiNotes: Set<Int>

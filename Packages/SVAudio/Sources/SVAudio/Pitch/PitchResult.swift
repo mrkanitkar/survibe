@@ -23,6 +23,14 @@ public struct PitchResult: Sendable, Equatable {
     /// Confidence level of the detection (0.0 to 1.0).
     public let confidence: Double
 
+    /// Whether the detected note belongs to the active raga's scale.
+    /// `nil` when no raga context is active (equal temperament mode).
+    public let isInRaga: Bool?
+
+    /// Cents deviation from the just-intonation target for this raga scale degree.
+    /// `nil` when no raga context is active.
+    public let ragaCentsOffset: Double?
+
     public init(
         frequency: Double,
         amplitude: Double,
@@ -30,7 +38,9 @@ public struct PitchResult: Sendable, Equatable {
         octave: Int,
         centsOffset: Double,
         timestamp: Date = Date(),
-        confidence: Double
+        confidence: Double,
+        isInRaga: Bool? = nil,
+        ragaCentsOffset: Double? = nil
     ) {
         self.frequency = frequency
         self.amplitude = amplitude
@@ -39,5 +49,7 @@ public struct PitchResult: Sendable, Equatable {
         self.centsOffset = centsOffset
         self.timestamp = timestamp
         self.confidence = confidence
+        self.isInRaga = isInRaga
+        self.ragaCentsOffset = ragaCentsOffset
     }
 }

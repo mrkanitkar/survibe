@@ -10,6 +10,8 @@
   ],
   "defaultOptions" : {
     "codeCoverage" : true,
+    "defaultTestExecutionTimeAllowance" : 60,
+    "maximumTestExecutionTimeAllowance" : 120,
     "testTimeoutsEnabled" : true
   },
   "testTargets" : [
@@ -22,16 +24,51 @@
     },
     {
       "target" : {
-        "containerPath" : "container:SurVibe.xcodeproj",
-        "identifier" : "A961E72C2F5F808100B3333D",
-        "name" : "SurVibeUITests"
+        "containerPath" : "container:Packages\/SVAudio",
+        "identifier" : "SVAudioTests",
+        "name" : "SVAudioTests"
       }
     },
     {
       "target" : {
-        "containerPath" : "container:Packages\/SVAudio",
-        "identifier" : "SVAudioTests",
-        "name" : "SVAudioTests"
+        "containerPath" : "container:Packages\/SVCore",
+        "identifier" : "SVCoreTests",
+        "name" : "SVCoreTests"
+      }
+    },
+    {
+      "target" : {
+        "containerPath" : "container:Packages\/SVLearning",
+        "identifier" : "SVLearningTests",
+        "name" : "SVLearningTests"
+      }
+    },
+    {
+      "target" : {
+        "containerPath" : "container:Packages\/SVAI",
+        "identifier" : "SVAITests",
+        "name" : "SVAITests"
+      }
+    },
+    {
+      "target" : {
+        "containerPath" : "container:Packages\/SVSocial",
+        "identifier" : "SVSocialTests",
+        "name" : "SVSocialTests"
+      }
+    },
+    {
+      "target" : {
+        "containerPath" : "container:Packages\/SVBilling",
+        "identifier" : "SVBillingTests",
+        "name" : "SVBillingTests"
+      }
+    },
+    {
+      "target" : {
+        "containerPath" : "container:Packages\/SVAdvanced",
+        "identifier" : "SVAdvancedTests",
+        "name" : "SVAdvancedTests"
       }
     }
   ],

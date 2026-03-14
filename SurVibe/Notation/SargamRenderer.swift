@@ -12,6 +12,7 @@ import SwiftUI
 /// - Past notes rendered at reduced opacity (0.5)
 /// - Future notes rendered at slightly reduced opacity (0.8)
 /// - Current note highlighted with scale and glow effects
+/// - Detected pitch highlighted with accuracy-colored border and cents badge
 struct SargamRenderer: View {
 
     // MARK: - Properties
@@ -27,6 +28,15 @@ struct SargamRenderer: View {
 
     /// Opacity for note label text. Use 0.0 to hide labels entirely.
     let labelOpacity: Double
+
+    /// Name of the currently detected pitch (e.g., "Sa", "Re"), or nil if none detected.
+    var detectedNoteName: String?
+
+    /// Octave of the currently detected pitch, or nil if none detected.
+    var detectedOctave: Int?
+
+    /// Cents offset of the currently detected pitch from the nearest note.
+    var detectedCents: Double = 0
 
     @Environment(\.accessibilityReduceMotion)
     private var reduceMotion
@@ -80,6 +90,8 @@ struct SargamRenderer: View {
                             zoomScale: zoomScale,
                             isCurrentNote: index == currentNoteIndex,
                             isPastNote: isPastNote(at: index),
+                            isDetectedNote: isNoteDetected(at: index),
+                            detectedCents: isNoteDetected(at: index) ? detectedCents : 0,
                             labelOpacity: labelOpacity,
                             reduceMotion: reduceMotion
                         )
@@ -107,6 +119,19 @@ struct SargamRenderer: View {
     private func isPastNote(at index: Int) -> Bool {
         guard let current = currentNoteIndex else { return false }
         return index < current
+    }
+
+    /// Determines whether the note at the given index matches the currently detected pitch.
+    ///
+    /// Compares the note's swar name and octave against the detected pitch values.
+    ///
+    /// - Parameter index: The index of the note to check.
+    /// - Returns: `true` if the note matches the detected pitch.
+    private func isNoteDetected(at index: Int) -> Bool {
+        guard let detectedName = detectedNoteName,
+              let detectedOct = detectedOctave else { return false }
+        let note = notes[index]
+        return note.note == detectedName && note.octave == detectedOct
     }
 }
 

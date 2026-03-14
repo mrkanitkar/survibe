@@ -71,25 +71,24 @@ public final class YINPitchDetector: PitchDetectorProtocol {
             return
         }
 
-        let frequency = detectPitch(
+        let detection = detectPitchWithConfidence(
             buffer: channelData, frameCount: frameLength,
             sampleRate: buffer.format.sampleRate, threshold: yinThreshold
         )
 
-        guard frequency > 0,
+        guard detection.frequency > 0,
               let (noteName, octave, cents) = try? SwarUtility.frequencyToNote(
-                  frequency, referencePitch: refPitch
+                  detection.frequency, referencePitch: refPitch
               )
         else {
             continuation.yield(silenceResult(amplitude: amplitude))
             return
         }
 
-        let confidence = min(1.0, amplitude * 2.0)
         continuation.yield(PitchResult(
-            frequency: frequency, amplitude: amplitude,
+            frequency: detection.frequency, amplitude: amplitude,
             noteName: noteName, octave: octave,
-            centsOffset: cents, confidence: confidence
+            centsOffset: cents, confidence: detection.confidence
         ))
     }
 
@@ -114,16 +113,27 @@ public final class YINPitchDetector: PitchDetectorProtocol {
 
     // MARK: - YIN Pitch Detection
 
-    /// YIN autocorrelation pitch detection algorithm.
-    /// Returns detected frequency in Hz, or 0 if no pitch detected.
-    nonisolated private static func detectPitch(
+    /// Raw detection result containing frequency and confidence.
+    private struct YINDetectionResult {
+        let frequency: Double
+        let confidence: Double
+    }
+
+    /// YIN autocorrelation pitch detection with spectral confidence.
+    ///
+    /// Returns both the detected frequency and a confidence metric based on
+    /// YIN's cumulative mean normalized difference function (CMNDF).
+    /// Confidence = 1.0 - cmndf[bestTau], which naturally measures signal clarity.
+    nonisolated private static func detectPitchWithConfidence(
         buffer: UnsafePointer<Float>,
         frameCount: Int,
         sampleRate: Double,
         threshold: Double
-    ) -> Double {
+    ) -> YINDetectionResult {
         let halfLength = frameCount / 2
-        guard halfLength > 0 else { return 0 }
+        guard halfLength > 0 else {
+            return YINDetectionResult(frequency: 0, confidence: 0)
+        }
 
         // Step 1: Compute difference function d(tau)
         var difference = [Float](repeating: 0, count: halfLength)
@@ -142,7 +152,6 @@ public final class YINPitchDetector: PitchDetectorProtocol {
         var runningSum: Float = 0
         for tau in 1..<halfLength {
             runningSum += difference[tau]
-            // Guard against division by zero (silence)
             if runningSum > 0 {
                 cumulativeNorm[tau] = difference[tau] * Float(tau) / runningSum
             } else {
@@ -151,17 +160,22 @@ public final class YINPitchDetector: PitchDetectorProtocol {
         }
 
         // Step 3: Absolute threshold — find first dip below threshold
-        let minTau = Int(sampleRate / 4000.0) // ~4000 Hz max detectable
+        let minTau = Int(sampleRate / 4000.0)
         for tau in minTau..<halfLength where cumulativeNorm[tau] < Float(threshold) {
             // Step 4: Parabolic interpolation for sub-sample accuracy
             let refinedTau = parabolicInterpolation(cumulativeNorm, tau: tau)
             let frequency = sampleRate / Double(refinedTau)
-            if frequency > 50 && frequency < 4000 {
-                return frequency
+            if frequency > 50, frequency < 4000 {
+                let confidence = SpectralConfidence.fromYIN(
+                    cmndfAtBestTau: cumulativeNorm[tau]
+                )
+                return YINDetectionResult(
+                    frequency: frequency, confidence: confidence
+                )
             }
         }
 
-        return 0
+        return YINDetectionResult(frequency: 0, confidence: 0)
     }
 
     /// Parabolic interpolation around a detected minimum for sub-sample accuracy.

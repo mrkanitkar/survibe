@@ -33,6 +33,10 @@ public struct NoteScore: Sendable, Equatable, Identifiable {
     /// The detected note name (swar) from pitch detection, if any.
     public let detectedNote: String?
 
+    /// Whether the detected note was outside the active raga's scale.
+    /// `nil` when no raga context was active during scoring.
+    public let isOutOfRaga: Bool?
+
     /// Timestamp of this score.
     public let timestamp: Date
 
@@ -45,6 +49,7 @@ public struct NoteScore: Sendable, Equatable, Identifiable {
         durationDeviation: Double,
         expectedNote: String,
         detectedNote: String? = nil,
+        isOutOfRaga: Bool? = nil,
         timestamp: Date = Date()
     ) {
         self.id = id
@@ -55,6 +60,7 @@ public struct NoteScore: Sendable, Equatable, Identifiable {
         self.durationDeviation = durationDeviation
         self.expectedNote = expectedNote
         self.detectedNote = detectedNote
+        self.isOutOfRaga = isOutOfRaga
         self.timestamp = timestamp
     }
 }

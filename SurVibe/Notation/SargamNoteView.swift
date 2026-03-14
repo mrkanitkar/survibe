@@ -29,6 +29,12 @@ struct SargamNoteView: View {
     /// Whether this note has already been played in the sequence.
     let isPastNote: Bool
 
+    /// Whether this note matches the currently detected pitch from the microphone.
+    var isDetectedNote: Bool = false
+
+    /// Cents offset of the detected pitch (only meaningful when `isDetectedNote` is true).
+    var detectedCents: Double = 0
+
     /// Opacity for the note label text below the block.
     let labelOpacity: Double
 
@@ -86,17 +92,65 @@ struct SargamNoteView: View {
             .frame(width: noteWidth, height: 48)
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .stroke(
-                        Color.primary.opacity(isCurrentNote ? 1 : 0.2),
-                        lineWidth: isCurrentNote ? 2 : 0.5
-                    )
+                    .stroke(noteStrokeColor, lineWidth: noteStrokeWidth)
             )
+            .overlay(alignment: .topTrailing) {
+                // Cents badge when this note is detected
+                if isDetectedNote {
+                    centsBadge
+                }
+            }
             .if(isCurrentNote) { view in
                 view
                     .shadow(color: backgroundColor.opacity(0.6), radius: 8)
                     .scaleEffect(reduceMotion ? 1.0 : 1.15, anchor: .center)
             }
+            .if(isDetectedNote && !isCurrentNote) { view in
+                view
+                    .shadow(color: detectionAccuracyColor.opacity(0.5), radius: 6)
+            }
             .opacity(isPastNote ? 0.5 : (isCurrentNote ? 1.0 : 0.8))
+    }
+
+    /// Stroke color for the note block border.
+    private var noteStrokeColor: Color {
+        if isDetectedNote {
+            return detectionAccuracyColor
+        }
+        return Color.primary.opacity(isCurrentNote ? 1 : 0.2)
+    }
+
+    /// Stroke width for the note block border.
+    private var noteStrokeWidth: CGFloat {
+        if isDetectedNote { return 3 }
+        return isCurrentNote ? 2 : 0.5
+    }
+
+    /// Compact cents offset badge overlaid on detected notes.
+    private var centsBadge: some View {
+        Text(centsLabel)
+            .font(.system(size: 9, weight: .bold).monospacedDigit())
+            .foregroundStyle(.white)
+            .padding(.horizontal, 3)
+            .padding(.vertical, 1)
+            .background(Capsule().fill(detectionAccuracyColor))
+            .offset(x: 4, y: -4)
+            .accessibilityHidden(true)
+    }
+
+    /// Formatted cents label (e.g., "+5¢" or "−12¢").
+    private var centsLabel: String {
+        let rounded = Int(detectedCents)
+        if abs(rounded) < 5 { return "✓" }
+        return "\(rounded > 0 ? "+" : "")\(rounded)¢"
+    }
+
+    /// Color indicating pitch accuracy of the detected note.
+    private var detectionAccuracyColor: Color {
+        let absCents = abs(detectedCents)
+        if absCents < 10 { return .green }
+        if absCents < 25 { return .orange }
+        return .red
     }
 
     /// Komal modifier indicator: a small dot below the note block.
@@ -167,6 +221,15 @@ struct SargamNoteView: View {
 
         if isCurrentNote {
             parts.append("currently playing")
+        }
+        if isDetectedNote {
+            let absCents = abs(Int(detectedCents))
+            if absCents < 10 {
+                parts.append("detected, in tune")
+            } else {
+                let direction = detectedCents > 0 ? "sharp" : "flat"
+                parts.append("detected, \(absCents) cents \(direction)")
+            }
         }
 
         return parts.joined(separator: ", ")

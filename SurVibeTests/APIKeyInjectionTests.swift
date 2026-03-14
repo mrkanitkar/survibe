@@ -53,9 +53,15 @@ struct APIKeyInjectionTests {
     @MainActor
     func missingAPIKeyHandledGracefully() {
         let manager = AnalyticsManager.shared
-        // Configuring with empty key should not crash — analytics simply stays disabled
+        let wasPreviouslyConfigured = manager.isConfigured
+        // Configuring with empty key should not crash — analytics simply stays disabled.
+        // Note: isConfigured may already be true from another test (singleton state persists).
         manager.configure(apiKey: "")
-        #expect(manager.isConfigured == false, "Empty key should not configure analytics")
+        // Empty key should NOT change isConfigured state — it should stay at whatever it was
+        #expect(
+            manager.isConfigured == wasPreviouslyConfigured,
+            "Empty key configure should not change isConfigured state"
+        )
     }
 
     @Test("AnalyticsManager handles placeholder key without crash")

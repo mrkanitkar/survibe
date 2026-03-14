@@ -1,3 +1,4 @@
+import SwiftData
 import Testing
 
 @testable import SurVibe
@@ -94,9 +95,8 @@ struct LanguageMappingTests {
 
 // MARK: - SongLibraryViewModel Tests
 
-@MainActor
 struct SongLibraryViewModelTests {
-    @Test func initialState() throws {
+    @Test @MainActor func initialState() throws {
         let container = try makeTestContainer()
         let viewModel = SongLibraryViewModel(modelContext: container.mainContext)
 
@@ -112,7 +112,7 @@ struct SongLibraryViewModelTests {
         #expect(!viewModel.hasActiveFilters)
     }
 
-    @Test func languageFilterToggle() throws {
+    @Test @MainActor func languageFilterToggle() throws {
         let container = try makeTestContainer()
         let viewModel = SongLibraryViewModel(modelContext: container.mainContext)
 
@@ -125,7 +125,7 @@ struct SongLibraryViewModelTests {
         #expect(!viewModel.hasActiveFilters)
     }
 
-    @Test func difficultyFilterToggle() throws {
+    @Test @MainActor func difficultyFilterToggle() throws {
         let container = try makeTestContainer()
         let viewModel = SongLibraryViewModel(modelContext: container.mainContext)
 
@@ -136,7 +136,7 @@ struct SongLibraryViewModelTests {
         #expect(viewModel.activeDifficultyFilter == nil)
     }
 
-    @Test func raagFilterToggle() throws {
+    @Test @MainActor func raagFilterToggle() throws {
         let container = try makeTestContainer()
         let viewModel = SongLibraryViewModel(modelContext: container.mainContext)
 
@@ -151,7 +151,7 @@ struct SongLibraryViewModelTests {
         #expect(viewModel.activeRaagFilters.count == 1)
     }
 
-    @Test func favoritesToggle() throws {
+    @Test @MainActor func favoritesToggle() throws {
         let container = try makeTestContainer()
         let viewModel = SongLibraryViewModel(modelContext: container.mainContext)
 
@@ -162,7 +162,7 @@ struct SongLibraryViewModelTests {
         #expect(!viewModel.showFavoritesOnly)
     }
 
-    @Test func clearAllFilters() throws {
+    @Test @MainActor func clearAllFilters() throws {
         let container = try makeTestContainer()
         let viewModel = SongLibraryViewModel(modelContext: container.mainContext)
 
@@ -181,7 +181,7 @@ struct SongLibraryViewModelTests {
         #expect(viewModel.searchText.isEmpty)
     }
 
-    @Test func updateSort() throws {
+    @Test @MainActor func updateSort() throws {
         let container = try makeTestContainer()
         let viewModel = SongLibraryViewModel(modelContext: container.mainContext)
 

@@ -7,7 +7,15 @@ import SwiftUI
 /// both Indian (Swar) and Western note names with tuning accuracy.
 struct PracticeTab: View {
     @State private var viewModel = PitchDetectionViewModel()
+    @State private var isLatchingEnabled = false
+    @AppStorage("visualizationMode") private var visualizationModeRaw: String = VisualizationMode.tuner.rawValue
+    @State private var keyboardLayout: KeyboardLayoutMode = .piano
     @Environment(\.openURL) private var openURL
+
+    /// Current visualization mode, derived from persisted raw value.
+    private var visualizationMode: VisualizationMode {
+        VisualizationMode(rawValue: visualizationModeRaw) ?? .tuner
+    }
 
     var body: some View {
         NavigationStack {
@@ -41,6 +49,8 @@ struct PracticeTab: View {
                 }
                 ToolbarItem(placement: .primaryAction) {
                     HStack(spacing: Spacing.sm) {
+                        keyboardLayoutToggle
+                        latchingControls
                         latencyMenu
                         Button {
                             if viewModel.isListening {
@@ -121,13 +131,45 @@ struct PracticeTab: View {
             .padding(.horizontal, Spacing.lg)
             .padding(.top, Spacing.lg)
 
+            // Visualization mode picker
+            Picker("Visualization", selection: $visualizationModeRaw) {
+                ForEach(VisualizationMode.allCases, id: \.rawValue) { mode in
+                    Label(mode.displayName, systemImage: mode.systemImage)
+                        .tag(mode.rawValue)
+                }
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, Spacing.lg)
+            .padding(.top, Spacing.sm)
+            .accessibilityLabel("Visualization mode")
+            .accessibilityHint("Choose between tuner, waveform, pitch track, or spectrum display")
+
+            // Audio visualization
+            AudioVisualizationView(
+                mode: visualizationMode,
+                currentResult: viewModel.currentResult,
+                liveAmplitude: viewModel.liveAmplitude,
+                isListening: viewModel.isListening
+            )
+            .padding(.horizontal, Spacing.lg)
+            .padding(.top, Spacing.sm)
+
             Spacer()
 
-            PianoKeyboardView(
-                activeMidiNotes: viewModel.activeMidiNotes,
-                activeCentsOffset: viewModel.currentResult?.centsOffset ?? 0
-            )
-            .environment(\.layoutDirection, .leftToRight)
+            switch keyboardLayout {
+            case .piano:
+                InteractivePianoView(
+                    activeMidiNotes: viewModel.activeMidiNotes,
+                    activeCentsOffset: viewModel.currentResult?.centsOffset ?? 0,
+                    isLatchingEnabled: isLatchingEnabled
+                )
+            case .isomorphic:
+                IsomorphicSargamView(
+                    activeMidiNotes: viewModel.activeMidiNotes,
+                    activeCentsOffset: viewModel.currentResult?.centsOffset ?? 0,
+                    isLatchingEnabled: isLatchingEnabled
+                )
+            }
 
             if viewModel.isListening && !viewModel.recentNotes.isEmpty {
                 noteHistory
@@ -364,6 +406,36 @@ private extension PracticeTab {
         .foregroundStyle(expressionColor(expression.type))
         .accessibilityLabel("Expression: \(expression.type.displayName)")
         .accessibilityHint("Current pitch expression detected from your playing")
+    }
+
+    /// Toggle between piano and isomorphic sargam keyboard layouts.
+    var keyboardLayoutToggle: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                keyboardLayout = keyboardLayout == .piano ? .isomorphic : .piano
+            }
+        } label: {
+            Image(systemName: keyboardLayout.systemImage)
+                .font(.title3)
+        }
+        .accessibilityLabel(
+            "Switch to \(keyboardLayout == .piano ? KeyboardLayoutMode.isomorphic.displayName : KeyboardLayoutMode.piano.displayName) layout"
+        )
+        .accessibilityHint("Toggles between piano and sargam keyboard layouts")
+    }
+
+    /// Latching toggle and clear button for chord building mode.
+    @ViewBuilder
+    var latchingControls: some View {
+        Button {
+            isLatchingEnabled.toggle()
+        } label: {
+            Image(systemName: isLatchingEnabled ? "pin.fill" : "pin")
+                .font(.title3)
+                .foregroundStyle(isLatchingEnabled ? .green : .secondary)
+        }
+        .accessibilityLabel(isLatchingEnabled ? "Disable latching" : "Enable latching")
+        .accessibilityHint("When enabled, tapped keys stay held for chord building")
     }
 
     /// Toolbar menu for selecting latency preset.
