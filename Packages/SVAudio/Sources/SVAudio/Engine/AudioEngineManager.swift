@@ -11,7 +11,7 @@ import os.log
 /// - AVAudioPlayerNode x2 (tanpura, metronome)
 /// - Main mixer with per-node volume
 @MainActor
-public final class AudioEngineManager {
+public final class AudioEngineManager: AudioEngineProviding {
 
     // MARK: - Engine Mode
 
@@ -50,7 +50,12 @@ public final class AudioEngineManager {
     public let bufferSize: AVAudioFrameCount = 2048
 
     private var isConfigured = false
-    private var hasMicTap = false
+
+    /// Whether a microphone tap is currently installed on the input node.
+    ///
+    /// Exposed as public read-only so other components can guard against
+    /// attempting to install a second tap while one is already active.
+    public private(set) var hasMicTap = false
 
     /// Current engine mode — tracks which audio session category is active.
     private var currentMode: EngineMode = .stopped

@@ -75,12 +75,12 @@ enum FallingNotesLayoutEngine {
     /// - Parameters:
     ///   - duration: Note duration in seconds.
     ///   - pixelsPerSecond: Spatial conversion factor.
-    ///   - minimumHeight: Floor height in points. Default is 8.
+    ///   - minimumHeight: Floor height in points. Default is 24.
     /// - Returns: Height of the note rectangle in points.
     static func noteHeight(
         duration: TimeInterval,
         pixelsPerSecond: CGFloat,
-        minimumHeight: CGFloat = 8
+        minimumHeight: CGFloat = 24
     ) -> CGFloat {
         max(duration * pixelsPerSecond, minimumHeight)
     }
@@ -108,32 +108,85 @@ enum FallingNotesLayoutEngine {
         return noteBottom > -padding && noteTop < viewportHeight + padding
     }
 
+    /// Natural (white-key) chromatic offsets within an octave (0 = C).
+    ///
+    /// Used by the fallback geometry calculation to distinguish white keys
+    /// from black keys when `keyPositions` has not yet been populated.
+    private static let naturalOffsets: Set<Int> = [0, 2, 4, 5, 7, 9, 11]
+
     /// Find the horizontal center X position for a MIDI note.
     ///
-    /// Looks up the note in the provided key position array reported
-    /// by `InteractivePianoView` via `KeyPositionPreference`.
+    /// First attempts to look up the measured position in `keyPositions` (accurate,
+    /// reported by `InteractivePianoView` via `KeyPositionPreference`). If the array
+    /// is empty — which happens on the first render pass before the preference fires —
+    /// falls back to a geometric approximation based on a standard 61-key piano layout
+    /// so that notes are visible immediately rather than producing a blank screen.
     ///
     /// - Parameters:
     ///   - midiNote: MIDI note number to locate.
     ///   - keyPositions: Array of key positions from the piano keyboard view.
-    /// - Returns: Center X of the matching key, or `nil` if the note is not on the visible keyboard.
-    static func noteX(midiNote: UInt8, keyPositions: [KeyPosition]) -> CGFloat? {
-        keyPositions.first { $0.midiNote == midiNote }?.centerX
+    ///   - viewWidth: Width of the canvas in points, used for the fallback calculation.
+    /// - Returns: Center X of the matching key, or `nil` if the note is outside the keyboard range.
+    static func noteX(
+        midiNote: UInt8,
+        keyPositions: [KeyPosition],
+        viewWidth: CGFloat = 390
+    ) -> CGFloat? {
+        // Fast path: use measured positions once the piano has laid out.
+        if let pos = keyPositions.first(where: { $0.midiNote == midiNote }) {
+            return pos.centerX
+        }
+
+        // Fallback: approximate position from standard 61-key piano geometry.
+        // Used on the first render before keyPositions arrives via preference.
+        let startMIDI = 36  // C2
+        let endMIDI   = 96  // C7
+        let note = Int(midiNote)
+        guard note >= startMIDI && note <= endMIDI else { return nil }
+
+        let whiteKeyCount = (startMIDI...endMIDI)
+            .filter { naturalOffsets.contains((($0 - 60) % 12 + 12) % 12) }
+            .count
+        guard whiteKeyCount > 0 else { return nil }
+        let whiteKeyWidth = viewWidth / CGFloat(whiteKeyCount)
+
+        var whiteIndex = 0
+        for midi in startMIDI...endMIDI {
+            let offset = ((midi - 60) % 12 + 12) % 12
+            let isNatural = naturalOffsets.contains(offset)
+            if midi == note {
+                // White key: center of its slot. Black key: between the two adjacent white keys.
+                return isNatural
+                    ? (CGFloat(whiteIndex) + 0.5) * whiteKeyWidth
+                    : CGFloat(whiteIndex) * whiteKeyWidth
+            }
+            if isNatural { whiteIndex += 1 }
+        }
+        return nil
     }
 
-    /// Color for a note based on its scoring state.
+    /// Color for a note based on its scoring state and Swar identity.
     ///
-    /// Returns distinct colors that provide clear visual feedback:
-    /// - Upcoming notes are translucent blue.
-    /// - Active notes glow yellow to draw attention.
-    /// - Correct/wrong/missed use standard traffic-light metaphor.
+    /// Upcoming and active notes use `SargamColorMap` to show Swar identity
+    /// so the player can read approaching notes by color before they arrive.
+    /// Scored states (correct/wrong/missed) override the Swar color with
+    /// standard traffic-light feedback so results are unambiguous.
     ///
-    /// - Parameter state: The scoring state of the note.
+    /// - Upcoming: `SargamColorMap` color at 60% opacity (recognizable, not distracting).
+    /// - Active: `SargamColorMap` color at full opacity (bright, high-contrast cue).
+    /// - Correct: `.green` (scoring feedback overrides Swar color).
+    /// - Wrong: `.red`.
+    /// - Missed: `.gray` at 40% opacity.
+    ///
+    /// - Parameters:
+    ///   - state: The scoring state of the note.
+    ///   - swarName: The Swar name (e.g. "Sa", "Komal Re", "Tivra Ma") used to
+    ///     look up the identity color. Unrecognized names fall back to `.gray`.
     /// - Returns: A `Color` value for rendering.
-    static func noteColor(state: NoteState) -> Color {
+    static func noteColor(state: NoteState, swarName: String) -> Color {
         switch state {
-        case .upcoming: Color.blue.opacity(0.6)
-        case .active: Color.yellow
+        case .upcoming: SargamColorMap.color(for: swarName).opacity(0.6)
+        case .active: SargamColorMap.color(for: swarName)
         case .correct: Color.green
         case .wrong: Color.red
         case .missed: Color.gray.opacity(0.4)

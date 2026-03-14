@@ -38,8 +38,8 @@ public struct SongImportDTO: Codable, Equatable, Sendable {
     /// Display order (ascending).
     public let sortOrder: Int
 
-    /// Base64-encoded MIDI binary data.
-    public let midiData: String
+    /// Base64-encoded MIDI binary data. Optional — null or absent means no MIDI.
+    public let midiData: String?
 
     /// Array of Sargam notes.
     public let sargamNotation: [SargamNoteDTO]

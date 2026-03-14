@@ -36,13 +36,13 @@ final class PlayAlongWaitController {
     /// - Parameters:
     ///   - noteEvents: The ordered note events from the loaded song.
     ///   - waitEngine: Wait mode engine to delegate evaluation to.
-    ///     Defaults to a new instance with default configuration.
+    ///     If `nil`, a new instance with default configuration is created.
     init(
         noteEvents: [NoteEvent],
-        waitEngine: WaitModeEngine = WaitModeEngine()
+        waitEngine: WaitModeEngine? = nil
     ) {
         self.noteEvents = noteEvents
-        self.waitEngine = waitEngine
+        self.waitEngine = waitEngine ?? WaitModeEngine()
     }
 
     // MARK: - Public Methods

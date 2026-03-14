@@ -31,6 +31,9 @@ struct SongDetailView: View {
     /// Whether the practice session full-screen cover is shown.
     @State private var showPractice = false
 
+    /// Whether the play-along full-screen cover is shown.
+    @State private var showPlayAlong = false
+
     // MARK: - Constants
 
     /// Two-column grid layout for metadata items.
@@ -54,6 +57,21 @@ struct SongDetailView: View {
 
                 metadataGrid
 
+                // Play Along button
+                Button {
+                    showPlayAlong = true
+                } label: {
+                    Label("Play Along", systemImage: "play.fill")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.blue)
+                .accessibilityLabel("Play along with this song")
+                .accessibilityHint(
+                    "Open an interactive play-along session with falling notes and scoring"
+                )
+
                 // Practice button
                 Button {
                     showPractice = true
@@ -70,6 +88,11 @@ struct SongDetailView: View {
         }
         .fullScreenCover(isPresented: $showPractice) {
             PracticeSessionView(song: song, modelContext: modelContext)
+        }
+        .fullScreenCover(isPresented: $showPlayAlong) {
+            NavigationStack {
+                SongPlayAlongView(song: song)
+            }
         }
         .navigationTitle(song.title)
         .navigationBarTitleDisplayMode(.inline)

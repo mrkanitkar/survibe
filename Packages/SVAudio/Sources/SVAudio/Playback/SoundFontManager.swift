@@ -15,7 +15,7 @@ import os.log
 /// uses `SVAudioTryObjC` to catch those exceptions and convert them
 /// to Swift `Error` values, preventing app crashes.
 @MainActor
-public final class SoundFontManager {
+public final class SoundFontManager: SoundFontPlaying {
     // MARK: - Properties
 
     public static let shared = SoundFontManager()
@@ -97,7 +97,7 @@ public final class SoundFontManager {
     ///
     /// Starts the audio engine for playback if not already running, then
     /// loads the piano SoundFont. Safe to call multiple times — returns
-    /// immediately if already loaded.
+    /// immediately if already loaded AND the engine is still running.
     ///
     /// The bundled SoundFont is a real multi-sampled upright piano
     /// (FreePats UprightPianoKW, CC0 public domain) with 27 sample zones
@@ -105,7 +105,9 @@ public final class SoundFontManager {
     ///
     /// - Throws: If the engine fails to start or the SoundFont fails to load.
     public func loadBundledPiano() throws {
-        guard !isLoaded else { return }
+        // Re-load if the engine was stopped since last load (e.g. after cleanup()).
+        // isLoaded=true with a stopped engine means the sampler AU is disconnected.
+        guard !isLoaded || !AudioEngineManager.shared.isRunning else { return }
 
         // Start the audio engine in playback-only mode (no mic permission).
         try AudioEngineManager.shared.startForPlayback()
@@ -152,6 +154,15 @@ public final class SoundFontManager {
             sampler.stopNote(note, onChannel: channel)
         }
         activeNotes.removeAll()
+    }
+
+    /// Reset the loaded state so `loadBundledPiano()` will re-attach the sampler
+    /// after the audio engine has been stopped and restarted.
+    ///
+    /// Call this whenever `AudioEngineManager.stop()` is called so the sampler
+    /// is properly reloaded into the new engine graph on the next session.
+    public func resetLoadedState() {
+        isLoaded = false
     }
 
     // MARK: - Private Methods

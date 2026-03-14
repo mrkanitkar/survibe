@@ -8,14 +8,18 @@ import Foundation
 public enum PracticeConstants {
     // MARK: - Silence Detection
 
-    /// Minimum amplitude threshold below which audio is considered silence.
+    /// Minimum amplitude threshold below which a pitch result is ignored.
     ///
-    /// Pitch detection results with amplitude below this value are ignored
-    /// to avoid scoring environmental noise as note attempts.
-    public static let silenceThreshold: Double = 0.02
+    /// Set to 0.005 to capture acoustic piano and other instruments played
+    /// 0.5–2m from the device microphone. The pre-filter in PracticeAudioProcessor
+    /// uses the same threshold so only non-trivially-loud buffers are processed.
+    public static let silenceThreshold: Double = 0.005
 
     /// Minimum confidence threshold for a pitch detection result to be scored.
-    public static let confidenceThreshold: Double = 0.5
+    ///
+    /// Set to 0.3 to accommodate piano's complex harmonic structure where
+    /// the fundamental autocorrelation peak is often weaker than harmonic peaks.
+    public static let confidenceThreshold: Double = 0.3
 
     // MARK: - Pitch Tolerance
 

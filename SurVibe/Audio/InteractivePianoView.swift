@@ -42,6 +42,12 @@ struct InteractivePianoView: View {
     /// Optional so existing call sites (Practice tab) are unaffected.
     var onNoteOn: ((Int) -> Void)?
 
+    /// Callback fired when a key is released, passing the MIDI note number.
+    ///
+    /// Used by play-along mode to clear the key-press highlight in the sheet view.
+    /// Optional so existing call sites (Practice tab) are unaffected.
+    var onNoteOff: ((Int) -> Void)?
+
     /// Controls which label system is shown on white keys.
     ///
     /// Defaults to `.dual` so all existing call sites continue to show both
@@ -240,6 +246,7 @@ struct InteractivePianoView: View {
         let midi = UInt8(clamping: Int(pitch.midiNoteNumber))
         touchedMidiNotes.remove(Int(midi))
         SoundFontManager.shared.stopNote(midiNote: midi)
+        onNoteOff?(Int(midi))
     }
 
     /// Clear all latched notes, stopping their audio.

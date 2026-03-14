@@ -90,12 +90,9 @@ struct NoteEvent: Identifiable, Equatable, Sendable {
             let durationSeconds = sargam.duration / beatsPerSecond
             let midiNote = UInt8(clamping: western.midiNumber)
 
-            // Validate MIDI note derivation matches Western notation
-            let derivedMIDI = Self.deriveMIDINote(swarName: fullSwarName, octave: sargam.octave)
-            assert(
-                derivedMIDI == nil || derivedMIDI == midiNote,
-                "MIDI mismatch: derived \(derivedMIDI ?? 0) != western \(midiNote) for \(fullSwarName)"
-            )
+            // Note: MIDI note comes from westernNotation (absolute) which is the source of truth.
+            // Sargam notation is relative (e.g. G=Sa for Jana Gana Mana), so deriveMIDINote
+            // would produce the wrong absolute MIDI number for non-C-root songs.
 
             let event = NoteEvent(
                 id: UUID(),
@@ -162,20 +159,6 @@ struct NoteEvent: Identifiable, Equatable, Sendable {
             return note
         }
         return "\(modifier.capitalized) \(note)"
-    }
-
-    /// Derive a MIDI note number from a Swar name and octave.
-    ///
-    /// Uses the `Swar` enum to find the matching case by raw value,
-    /// then computes the MIDI note: `60 + (octave - 4) * 12 + midiOffset`.
-    ///
-    /// - Parameters:
-    ///   - swarName: Full Swar name (e.g., "Komal Re").
-    ///   - octave: Note octave (typically 3–5).
-    /// - Returns: MIDI note number, or nil if the Swar name is not recognized.
-    private static func deriveMIDINote(swarName: String, octave: Int) -> UInt8? {
-        guard let swar = Swar(rawValue: swarName) else { return nil }
-        return swar.midiNote(octave: octave)
     }
 
     /// Derive Swar name, Western name, and octave from a MIDI note number.

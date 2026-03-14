@@ -51,19 +51,19 @@ struct FallingNotesView: View {
     // MARK: - Constants
 
     /// Width of each falling note rectangle in points.
-    private let noteWidth: CGFloat = 36
+    private let noteWidth: CGFloat = 48
 
     /// Corner radius of note rectangles.
     private let noteCornerRadius: CGFloat = 6
 
     /// Height of the hit line indicator at the bottom.
-    private let hitLineHeight: CGFloat = 2
+    private let hitLineHeight: CGFloat = 3
 
     /// Distance from the bottom of the viewport to the hit line.
     private let hitLineBottomInset: CGFloat = 0
 
     /// Minimum font size for note labels.
-    private let labelFontSize: CGFloat = 10
+    private let labelFontSize: CGFloat = 13
 
     // MARK: - Body
 
@@ -76,8 +76,8 @@ struct FallingNotesView: View {
                     drawHitLine(context: &context, size: size)
                     drawNotes(context: &context, size: size, viewportHeight: viewportHeight)
                 }
-                .accessibilityLabel(Text("Falling notes display", bundle: .module))
-                .accessibilityHint(Text("Notes fall toward the piano keyboard. Play each note as it reaches the line.", bundle: .module))
+                .accessibilityLabel(Text("Falling notes display"))
+                .accessibilityHint(Text("Notes fall toward the piano keyboard. Play each note as it reaches the line."))
             }
         }
     }
@@ -95,7 +95,7 @@ struct FallingNotesView: View {
         )
         context.fill(
             Path(hitLineRect),
-            with: .color(.white.opacity(0.6))
+            with: .color(.white.opacity(0.85))
         )
     }
 
@@ -132,15 +132,18 @@ struct FallingNotesView: View {
             }
 
             // Horizontal alignment with the piano key.
+            // Pass size.width so the fallback geometry uses the actual canvas width
+            // on first render, before keyPositions is populated via preference.
             guard let centerX = FallingNotesLayoutEngine.noteX(
                 midiNote: event.midiNote,
-                keyPositions: keyPositions
+                keyPositions: keyPositions,
+                viewWidth: size.width
             ) else {
                 continue
             }
 
             let state = noteStates[event.id] ?? .upcoming
-            let color = FallingNotesLayoutEngine.noteColor(state: state)
+            let color = FallingNotesLayoutEngine.noteColor(state: state, swarName: event.swarName)
 
             // Note rectangle — y is the TOP edge of the note.
             let noteRect = CGRect(
@@ -186,7 +189,7 @@ struct FallingNotesView: View {
         state: FallingNotesLayoutEngine.NoteState
     ) {
         // Skip label if the note is too small to display text legibly.
-        guard rect.height >= 16 else { return }
+        guard rect.height >= 20 else { return }
 
         let fontSize = min(labelFontSize, rect.height * 0.5)
         let textColor: Color = (state == .active || state == .correct) ? .black : .white
@@ -209,25 +212,42 @@ struct FallingNotesView: View {
 
 // MARK: - Preview
 
-#Preview("Falling Notes — Demo") {
-    let events = (0..<12).map { index in
-        NoteEvent(
-            id: UUID(),
-            midiNote: UInt8(60 + index),
-            swarName: ["Sa", "Komal Re", "Re", "Komal Ga", "Ga", "Ma",
-                        "Tivra Ma", "Pa", "Komal Dha", "Dha", "Komal Ni", "Ni"][index],
-            westernName: ["C4", "Db4", "D4", "Eb4", "E4", "F4",
-                          "F#4", "G4", "Ab4", "A4", "Bb4", "B4"][index],
-            octave: 4,
-            timestamp: TimeInterval(index) * 0.5,
-            duration: 0.45,
-            velocity: 100
-        )
+/// Helper that builds demo data for the falling notes preview.
+private enum FallingNotesPreviewData {
+    static let swarNames = [
+        "Sa", "Komal Re", "Re", "Komal Ga", "Ga", "Ma",
+        "Tivra Ma", "Pa", "Komal Dha", "Dha", "Komal Ni", "Ni",
+    ]
+    static let westernNames = [
+        "C4", "Db4", "D4", "Eb4", "E4", "F4",
+        "F#4", "G4", "Ab4", "A4", "Bb4", "B4",
+    ]
+
+    static func makeEvents() -> [NoteEvent] {
+        (0..<12).map { index in
+            NoteEvent(
+                id: UUID(),
+                midiNote: UInt8(60 + index),
+                swarName: swarNames[index],
+                westernName: westernNames[index],
+                octave: 4,
+                timestamp: TimeInterval(index) * 0.5,
+                duration: 0.45,
+                velocity: 100
+            )
+        }
     }
 
-    let positions = (0..<12).map { index in
-        KeyPosition(midiNote: UInt8(60 + index), centerX: CGFloat(40 + index * 30))
+    static func makeKeyPositions() -> [KeyPosition] {
+        (0..<12).map { index in
+            KeyPosition(midiNote: UInt8(60 + index), centerX: CGFloat(40 + index * 30))
+        }
     }
+}
+
+#Preview("Falling Notes — Demo") {
+    let events = FallingNotesPreviewData.makeEvents()
+    let positions = FallingNotesPreviewData.makeKeyPositions()
 
     FallingNotesView(
         noteEvents: events,

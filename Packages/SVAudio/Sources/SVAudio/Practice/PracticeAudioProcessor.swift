@@ -2,6 +2,10 @@ import AVFoundation
 import os.log
 import Synchronization
 
+// File-private logger accessible from nonisolated static methods.
+// Logger is Sendable so this is safe to use from any isolation context.
+private let practiceAudioLogger = Logger(subsystem: "com.survibe", category: "PracticeAudioProcessor")
+
 /// A `Sendable` snapshot of audio buffer data extracted on the audio thread.
 ///
 /// `AVAudioPCMBuffer` is not `Sendable`, so we copy the float samples and
@@ -91,11 +95,20 @@ public final class PracticeAudioProcessor {
     /// Reference pitch for frequency-to-note conversion (A4, in Hz).
     public var referencePitch: Double = 440.0
 
-    /// Minimum amplitude to consider a pitch detection valid.
-    private let silenceThreshold: Double = 0.02
+    /// Minimum RMS amplitude to consider a buffer worth analyzing.
+    ///
+    /// 0.005 (~0.5% of full scale) is appropriate for acoustic instruments
+    /// (piano, guitar) picked up 0.5–2m from the device microphone.
+    /// Lower values increase sensitivity at the cost of processing noise.
+    private let silenceThreshold: Double = 0.005
 
-    /// Minimum confidence for pitch results.
-    private let confidenceThreshold: Double = 0.5
+    /// Minimum autocorrelation confidence for a pitch result to be yielded.
+    ///
+    /// 0.3 is a practical lower bound for piano notes: the fundamental
+    /// autocorrelation peak can be weaker than harmonic peaks on bright-toned
+    /// instruments. The caller (PlayAlongViewModel) applies its own confidence
+    /// filter via PracticeConstants.confidenceThreshold.
+    private let confidenceThreshold: Double = 0.3
 
     /// Timer task for periodic DSP processing.
     private var dspTask: Task<Void, Never>?
@@ -132,10 +145,17 @@ public final class PracticeAudioProcessor {
 
         // Install mic tap — audio callback extracts samples into a Sendable snapshot
         let buffer = sharedBuffer
+        let tapLogger = Self.logger
         let installed = AudioEngineManager.shared.installMicTap { pcmBuffer, _ in
-            guard let channelData = pcmBuffer.floatChannelData?[0] else { return }
+            guard let channelData = pcmBuffer.floatChannelData?[0] else {
+                tapLogger.error("installMicTap callback: no float channel data")
+                return
+            }
             let frameLength = Int(pcmBuffer.frameLength)
-            guard frameLength > 0 else { return }
+            guard frameLength > 0 else {
+                tapLogger.error("installMicTap callback: zero frameLength")
+                return
+            }
             let samples = Array(UnsafeBufferPointer(start: channelData, count: frameLength))
             let snapshot = BufferSnapshot(
                 samples: samples,
@@ -189,9 +209,11 @@ public final class PracticeAudioProcessor {
         let confThresh = confidenceThreshold
 
         dspTask = Task { [weak self] in
+            var emptyBufferCount = 0
             while !Task.isCancelled {
                 // Read latest snapshot atomically
                 if let snapshot = buffer.consume() {
+                    emptyBufferCount = 0
                     let result = Self.detectPitch(
                         from: snapshot,
                         referencePitch: refPitch,
@@ -199,7 +221,18 @@ public final class PracticeAudioProcessor {
                         confidenceThreshold: confThresh
                     )
                     if let result {
+                        let freqStr = String(format: "%.1f", result.frequency)
+                        let confStr = String(format: "%.2f", result.confidence)
+                        Self.logger.debug(
+                            "Pitch detected: \(result.noteName)\(result.octave) \(freqStr)Hz conf=\(confStr)"
+                        )
                         self?.continuation?.yield(result)
+                    }
+                } else {
+                    emptyBufferCount += 1
+                    // Log every 20 empty cycles (~1 second) to detect no-audio-data scenarios
+                    if emptyBufferCount == 20 {
+                        Self.logger.warning("DSP loop: no audio data for ~1s — mic tap may not be receiving audio")
                     }
                 }
 
@@ -229,6 +262,14 @@ public final class PracticeAudioProcessor {
         guard !samples.isEmpty else { return nil }
 
         let rms = calculateRMS(samples)
+        // Debug-level only — visible in Console.app with subsystem filter, not in production logs.
+        // Log even below-threshold values so we can verify the mic tap is delivering audio.
+        if rms > 0.001 {
+            let rmsStr = String(format: "%.4f", rms)
+            let thrStr = String(format: "%.4f", silenceThreshold)
+            let rateStr = String(format: "%.0f", snapshot.sampleRate)
+            practiceAudioLogger.debug("detectPitch: rms=\(rmsStr) threshold=\(thrStr) rate=\(rateStr)Hz")
+        }
         guard rms >= silenceThreshold else { return nil }
 
         let sampleRate = snapshot.sampleRate
@@ -237,6 +278,9 @@ public final class PracticeAudioProcessor {
         let result = findBestCorrelation(
             samples: samples, sampleRate: sampleRate
         )
+        let confStr2 = String(format: "%.3f", result.confidence)
+        let thrStr2 = String(format: "%.3f", confidenceThreshold)
+        practiceAudioLogger.debug("detectPitch: lag=\(result.lag) confidence=\(confStr2) threshold=\(thrStr2)")
         guard result.confidence >= confidenceThreshold,
               result.lag > 0
         else { return nil }

@@ -123,6 +123,24 @@ final class PlayAlongViewModel {
         return []
     }
 
+    /// The swar name and octave of the first pressed MIDI/touch note, if any.
+    ///
+    /// Derived from `detectedMidiNotes`. Returns the base swar name as stored
+    /// in `SargamNote.note` (e.g. "Re" for Komal Re, "Sa" for Sa), which is
+    /// what `SargamRenderer.isNoteDetected` compares against. Used by
+    /// `ScrollingSheetView` to highlight the matching sargam block when the
+    /// user presses an on-screen key or a hardware MIDI keyboard key.
+    var detectedSwarInfo: (name: String, octave: Int)? {
+        guard let midiNote = detectedMidiNotes.min() else { return nil }
+        // swarNameFromMIDI returns full rawValue e.g. "Komal Re", "Tivra Ma", "Sa".
+        // SargamNote.note stores only the base name e.g. "Re", "Ma", "Sa".
+        // Extract the last word so the comparison in isNoteDetected matches.
+        let fullName = swarNameFromMIDI(UInt8(midiNote))
+        let baseName = fullName.components(separatedBy: " ").last ?? fullName
+        let octave = (midiNote / 12) - 1
+        return (name: baseName, octave: octave)
+    }
+
     /// Whether a USB/Bluetooth MIDI keyboard is currently connected.
     ///
     /// When `true`, note input comes from the MIDI keyboard rather than the
@@ -497,19 +515,45 @@ final class PlayAlongViewModel {
 
     /// Handle a keyboard touch (virtual piano input).
     ///
-    /// Same scoring logic as `handleNoteDetected`, but triggered by
-    /// the on-screen keyboard rather than pitch detection.
+    /// Handle a note-on event from the on-screen piano keyboard.
+    ///
+    /// Inserts the note into `detectedMidiNotes` so the sheet view highlights
+    /// the matching sargam block, then routes to scoring if playback is active
+    /// or to guided mode when idle/paused.
+    ///
+    /// - Parameter midiNote: MIDI note number of the pressed key.
+    func handleKeyboardNoteOn(midiNote: Int) {
+        detectedMidiNotes.insert(midiNote)
+        if playbackState == .playing {
+            processNoteInput(midiNote: midiNote)
+        } else if playbackState == .idle || playbackState == .paused {
+            handleGuidedNoteDetected(midiNote: midiNote)
+        }
+    }
+
+    /// Handle a note-off event from the on-screen piano keyboard.
+    ///
+    /// Removes the note from `detectedMidiNotes` so the sheet view un-highlights
+    /// the sargam block when the finger is lifted.
+    ///
+    /// - Parameter midiNote: MIDI note number of the released key.
+    func handleKeyboardNoteOff(midiNote: Int) {
+        detectedMidiNotes.remove(midiNote)
+    }
+
+    /// Handle an on-screen keyboard touch (legacy entry point used by tests).
+    ///
+    /// Delegates to `handleKeyboardNoteOn`. Kept for backwards compatibility
+    /// with existing test call sites.
     ///
     /// - Parameter midiNote: MIDI note number of the touched key.
     func handleKeyboardTouch(midiNote: Int) {
-        guard playbackState == .playing else { return }
-        processNoteInput(midiNote: midiNote)
+        handleKeyboardNoteOn(midiNote: midiNote)
     }
 
     /// Handle an on-screen keyboard touch in guided free-play mode.
     ///
     /// Routes the touch to guided scoring when playback is idle or paused.
-    /// Separate from `handleKeyboardTouch` which only fires during timed playback.
     ///
     /// - Parameter midiNote: MIDI note number of the touched key.
     func handleKeyboardTouchGuided(midiNote: Int) {
@@ -631,7 +675,7 @@ final class PlayAlongViewModel {
         //                resume (5–20 ms jitter) → @MainActor
         // New path:      CoreMIDI → direct closure → Task { @MainActor } (~1–3 ms)
         midiInput.onNoteEvent = { [weak self] event in
-            Task(priority: .userInteractive) { @MainActor [weak self] in
+            Task(priority: .high) { @MainActor [weak self] in
                 guard let self else { return }
                 let midiNote = Int(event.noteNumber)
 

@@ -27,7 +27,9 @@ final class SeedContentLoader {
     /// - v4: +5 English songs (Happy Birthday, London Bridge, Ode to Joy, Amazing Grace, Für Elise Theme)
     /// - v5: +keySignatureRaw, timeSignatureRaw fields on Song model for staff notation
     /// - v6: +8 lessons (total 10), +2 curricula (Sargam Foundations, Melodic Expression)
-    private static let currentContentVersion = 6
+    /// - v7: Jana Gana Mana updated with official notation in G major (G=Sa)
+    /// - v8: Force re-import Jana Gana Mana (v7 written before JSON was corrected)
+    private static let currentContentVersion = 8
 
     /// The stored seed content version from UserDefaults.
     static var storedContentVersion: Int {

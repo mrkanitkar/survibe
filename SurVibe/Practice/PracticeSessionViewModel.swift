@@ -520,7 +520,7 @@ final class PracticeSessionViewModel {
             ragaContext: ragaScoringContext
         )
         noteScores.append(score)
-        if pitch.noteName == expected.note && pitch.octave == expected.octave {
+        if pitch.noteName == expectedName && pitch.octave == expected.octave {
             currentPracticeNoteIndex += 1
             if currentPracticeNoteIndex >= sargamNotes.count {
                 completePractice()

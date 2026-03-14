@@ -8,7 +8,7 @@ import os.log
 /// A look-ahead loop runs via `Task.sleep`, scheduling 4 beats ahead to ensure the
 /// audio hardware always has upcoming beats queued.
 @MainActor
-public final class MetronomePlayer {
+public final class MetronomePlayer: MetronomePlaying {
     // MARK: - Properties
 
     public static let shared = MetronomePlayer()

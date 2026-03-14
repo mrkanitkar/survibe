@@ -1,13 +1,16 @@
 import SwiftUI
 
-/// Represents the five main tabs in SurVibe's tab bar.
+/// Represents the four main tabs in SurVibe's tab bar.
 ///
 /// Each tab case provides its display label and SF Symbol for consistent
 /// rendering across the tab bar and any tab-related UI.
+///
+/// The standalone pitch-detection practice screen (`PracticeTab`) is no
+/// longer a top-level tab — real-instrument detection is now integrated
+/// directly into the play-along experience (`SongPlayAlongView`).
 enum AppTab: String, CaseIterable, Hashable {
     case home
     case learn
-    case practice
     case songs
     case profile
 
@@ -16,7 +19,6 @@ enum AppTab: String, CaseIterable, Hashable {
         switch self {
         case .home: "Home"
         case .learn: "Learn"
-        case .practice: "Practice"
         case .songs: "Songs"
         case .profile: "Profile"
         }
@@ -27,7 +29,6 @@ enum AppTab: String, CaseIterable, Hashable {
         switch self {
         case .home: "house.fill"
         case .learn: "book.fill"
-        case .practice: "music.note"
         case .songs: "music.note.list"
         case .profile: "person.circle.fill"
         }

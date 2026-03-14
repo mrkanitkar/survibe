@@ -1,3 +1,5 @@
+import Foundation
+import SwiftUI
 import Testing
 @testable import SurVibe
 
@@ -125,12 +127,12 @@ struct FallingNotesLayoutEngineTests {
     }
 
     @Test func noteHeightEnforcesMinimum() {
-        // Very short note: 0.01s * 200 = 2 points, below minimum of 8.
+        // Very short note: 0.01s * 200 = 2 points, below minimum of 24.
         let height = FallingNotesLayoutEngine.noteHeight(
             duration: 0.01,
             pixelsPerSecond: 200
         )
-        #expect(height == 8.0)
+        #expect(height == 24.0)
     }
 
     @Test func noteHeightWithCustomMinimum() {
@@ -147,16 +149,16 @@ struct FallingNotesLayoutEngineTests {
             duration: 0,
             pixelsPerSecond: 200
         )
-        #expect(height == 8.0)
+        #expect(height == 24.0)
     }
 
     @Test func noteHeightExactlyAtMinimumIsNotBoosted() {
-        // 0.04s * 200 = 8.0, exactly the minimum.
+        // 0.12s * 200 = 24.0, exactly the new minimum.
         let height = FallingNotesLayoutEngine.noteHeight(
-            duration: 0.04,
+            duration: 0.12,
             pixelsPerSecond: 200
         )
-        #expect(height == 8.0)
+        #expect(height == 24.0)
     }
 
     // MARK: - isNoteVisible
@@ -277,8 +279,15 @@ struct FallingNotesLayoutEngineTests {
         #expect(x == nil)
     }
 
-    @Test func noteXWithEmptyPositions() {
-        let x = FallingNotesLayoutEngine.noteX(midiNote: 60, keyPositions: [])
+    @Test func noteXWithEmptyPositionsFallsBackToGeometry() {
+        // MIDI 60 (C4) is within range 36–96, so the fallback geometry should return a value.
+        let x = FallingNotesLayoutEngine.noteX(midiNote: 60, keyPositions: [], viewWidth: 390)
+        #expect(x != nil)
+    }
+
+    @Test func noteXWithEmptyPositionsOutOfRangeReturnsNil() {
+        // MIDI 20 is outside the 61-key range (36–96), so even the fallback returns nil.
+        let x = FallingNotesLayoutEngine.noteX(midiNote: 20, keyPositions: [], viewWidth: 390)
         #expect(x == nil)
     }
 
@@ -294,27 +303,30 @@ struct FallingNotesLayoutEngineTests {
     // MARK: - noteColor
 
     @Test func noteColorUpcoming() {
-        let color = FallingNotesLayoutEngine.noteColor(state: .upcoming)
-        #expect(color == .blue.opacity(0.6))
+        // Upcoming notes use SargamColorMap at 60% opacity for Swar identity.
+        let color = FallingNotesLayoutEngine.noteColor(state: .upcoming, swarName: "Sa")
+        #expect(color == SargamColorMap.color(for: "Sa").opacity(0.6))
     }
 
     @Test func noteColorActive() {
-        let color = FallingNotesLayoutEngine.noteColor(state: .active)
-        #expect(color == .yellow)
+        // Active notes use SargamColorMap at full opacity.
+        let color = FallingNotesLayoutEngine.noteColor(state: .active, swarName: "Ma")
+        #expect(color == SargamColorMap.color(for: "Ma"))
     }
 
     @Test func noteColorCorrect() {
-        let color = FallingNotesLayoutEngine.noteColor(state: .correct)
+        // Scored notes use traffic-light feedback colors regardless of Swar.
+        let color = FallingNotesLayoutEngine.noteColor(state: .correct, swarName: "Sa")
         #expect(color == .green)
     }
 
     @Test func noteColorWrong() {
-        let color = FallingNotesLayoutEngine.noteColor(state: .wrong)
+        let color = FallingNotesLayoutEngine.noteColor(state: .wrong, swarName: "Sa")
         #expect(color == .red)
     }
 
     @Test func noteColorMissed() {
-        let color = FallingNotesLayoutEngine.noteColor(state: .missed)
+        let color = FallingNotesLayoutEngine.noteColor(state: .missed, swarName: "Sa")
         #expect(color == .gray.opacity(0.4))
     }
 

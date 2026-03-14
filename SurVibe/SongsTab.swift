@@ -27,7 +27,7 @@ struct SongsTab: View {
             }
             .navigationTitle("Songs")
             .navigationDestination(for: Song.self) { song in
-                SongDetailView(song: song)
+                SongPlayAlongView(song: song)
             }
         }
         .accessibilityLabel(AccessibilityHelper.tabLabel(for: "Songs"))

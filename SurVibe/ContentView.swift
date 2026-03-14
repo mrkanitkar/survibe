@@ -36,14 +36,6 @@ struct ContentView: View {
                 LearnTab()
             }
 
-            Tab(
-                AppTab.practice.label,
-                systemImage: AppTab.practice.systemImage,
-                value: AppTab.practice
-            ) {
-                PracticeTab()
-            }
-
             Tab(AppTab.songs.label, systemImage: AppTab.songs.systemImage, value: AppTab.songs) {
                 SongsTab()
             }

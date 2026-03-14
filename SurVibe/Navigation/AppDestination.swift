@@ -11,6 +11,7 @@ enum AppDestination: Hashable {
     case lessonList
     case lessonDetail(Lesson)
     case practiceMode(Song)
+    case playAlong(Song)
     case profile
     case settings
 
@@ -32,6 +33,9 @@ enum AppDestination: Hashable {
             hasher.combine(lesson.id)
         case .practiceMode(let song):
             hasher.combine("practiceMode")
+            hasher.combine(song.id)
+        case .playAlong(let song):
+            hasher.combine("playAlong")
             hasher.combine(song.id)
         case .profile:
             hasher.combine("profile")
@@ -55,6 +59,8 @@ enum AppDestination: Hashable {
         case (.lessonDetail(let lhsLesson), .lessonDetail(let rhsLesson)):
             lhsLesson.id == rhsLesson.id
         case (.practiceMode(let lhsSong), .practiceMode(let rhsSong)):
+            lhsSong.id == rhsSong.id
+        case (.playAlong(let lhsSong), .playAlong(let rhsSong)):
             lhsSong.id == rhsSong.id
         case (.profile, .profile):
             true

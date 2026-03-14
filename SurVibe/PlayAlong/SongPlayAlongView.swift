@@ -116,11 +116,10 @@ struct SongPlayAlongView: View {
                 activeCentsOffset: viewModel.currentPitch?.centsOffset ?? 0,
                 expectedMidiNote: viewModel.expectedMidiNote,
                 onNoteOn: { midiNote in
-                    viewModel.handleKeyboardTouch(midiNote: midiNote)
-                    // Route on-screen keyboard input to guided free-play when idle
-                    if viewModel.playbackState == .idle || viewModel.playbackState == .paused {
-                        viewModel.handleKeyboardTouchGuided(midiNote: midiNote)
-                    }
+                    viewModel.handleKeyboardNoteOn(midiNote: midiNote)
+                },
+                onNoteOff: { midiNote in
+                    viewModel.handleKeyboardNoteOff(midiNote: midiNote)
                 },
                 notationMode: viewModel.notationMode,
                 manageSoundFont: false
@@ -226,7 +225,9 @@ struct SongPlayAlongView: View {
                 ScrollingSheetView(
                     song: song,
                     currentNoteIndex: viewModel.currentNoteIndex,
-                    notationMode: viewModel.notationMode
+                    notationMode: viewModel.notationMode,
+                    currentPitch: viewModel.currentPitch,
+                    detectedSwarInfo: viewModel.detectedSwarInfo
                 )
                 .accessibilityLabel("Scrolling sheet notation")
                 .accessibilityHint("Sheet notation scrolls to follow the current note")

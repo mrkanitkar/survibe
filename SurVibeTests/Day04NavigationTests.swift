@@ -8,9 +8,10 @@ import Testing
 @Suite("Day 4 — AppTab Tests")
 struct Day04AppTabTests {
 
-    @Test("AppTab has exactly 5 cases")
+    @Test("AppTab has exactly 4 cases")
     func appTabCaseCount() {
-        #expect(AppTab.allCases.count == 5)
+        // Practice tab was merged into the play-along experience (SongPlayAlongView).
+        #expect(AppTab.allCases.count == 4)
     }
 
     @Test("AppTab cases are in correct order")
@@ -18,16 +19,14 @@ struct Day04AppTabTests {
         let cases = AppTab.allCases
         #expect(cases[0] == .home)
         #expect(cases[1] == .learn)
-        #expect(cases[2] == .practice)
-        #expect(cases[3] == .songs)
-        #expect(cases[4] == .profile)
+        #expect(cases[2] == .songs)
+        #expect(cases[3] == .profile)
     }
 
     @Test("AppTab labels are human-readable")
     func appTabLabels() {
         #expect(AppTab.home.label == "Home")
         #expect(AppTab.learn.label == "Learn")
-        #expect(AppTab.practice.label == "Practice")
         #expect(AppTab.songs.label == "Songs")
         #expect(AppTab.profile.label == "Profile")
     }
@@ -36,7 +35,6 @@ struct Day04AppTabTests {
     func appTabSystemImages() {
         #expect(AppTab.home.systemImage == "house.fill")
         #expect(AppTab.learn.systemImage == "book.fill")
-        #expect(AppTab.practice.systemImage == "music.note")
         #expect(AppTab.songs.systemImage == "music.note.list")
         #expect(AppTab.profile.systemImage == "person.circle.fill")
     }
@@ -50,8 +48,8 @@ struct Day04AppTabTests {
 
     @Test("AppTab conforms to Hashable")
     func appTabHashable() {
-        let set: Set<AppTab> = [.home, .learn, .practice, .songs, .profile]
-        #expect(set.count == 5)
+        let set: Set<AppTab> = [.home, .learn, .songs, .profile]
+        #expect(set.count == 4)
     }
 }
 

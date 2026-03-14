@@ -17,6 +17,9 @@ struct SongLibraryView: View {
     /// Controls the sign-in prompt sheet for premium songs.
     @State private var signInTrigger: SignInTrigger?
 
+    /// Song for which to show the detail sheet (via long-press context menu).
+    @State private var detailSong: Song?
+
     /// Two-column adaptive grid.
     private let columns = [
         GridItem(.adaptive(minimum: 160), spacing: 16),
@@ -56,6 +59,11 @@ struct SongLibraryView: View {
         .sheet(item: $signInTrigger) { trigger in
             SignInPromptView(trigger: trigger)
         }
+        .sheet(item: $detailSong) { song in
+            NavigationStack {
+                SongDetailView(song: song)
+            }
+        }
         .task {
             await viewModel.loadSongs()
         }
@@ -78,6 +86,13 @@ struct SongLibraryView: View {
                             SongCardView(song: song)
                         }
                         .buttonStyle(.plain)
+                        .contextMenu {
+                            Button {
+                                detailSong = song
+                            } label: {
+                                Label("Song Details", systemImage: "info.circle")
+                            }
+                        }
                     }
                 }
             }

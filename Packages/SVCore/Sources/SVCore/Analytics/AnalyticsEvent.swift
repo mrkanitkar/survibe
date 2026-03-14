@@ -49,4 +49,9 @@ public enum AnalyticsEvent: String, Sendable {
     case waitModeToggled = "wait_mode_toggled"
     case waitModeNoteAttempted = "wait_mode_note_attempted"
     case waitModeCompleted = "wait_mode_completed"
+
+    // Play-Along events
+    case playAlongStarted = "play_along_started"
+    case playAlongCompleted = "play_along_completed"
+    case playAlongAbandoned = "play_along_abandoned"
 }

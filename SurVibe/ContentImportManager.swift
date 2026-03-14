@@ -223,7 +223,7 @@ final class ContentImportManager {
         song.westernNotation = try? JSONEncoder().encode(dto.westernNotation)
 
         // Encode MIDI data from base64 if present
-        if let midiString = dto.midiData as String?, !midiString.isEmpty {
+        if let midiString = dto.midiData, !midiString.isEmpty {
             song.midiData = Data(base64Encoded: midiString)
         }
 

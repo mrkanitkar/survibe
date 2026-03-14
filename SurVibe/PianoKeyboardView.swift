@@ -170,7 +170,7 @@ struct PianoKeyboardView: View {
         )
         .scaleEffect(isActive && !reduceMotion ? 1.04 : 1.0)
         .animation(
-            reduceMotion ? nil : .spring(response: 0.25, dampingFraction: 0.7),
+            reduceMotion ? nil : .spring(response: 0.08, dampingFraction: 0.8),
             value: isActive
         )
         .accessibilityLabel(
@@ -199,7 +199,7 @@ struct PianoKeyboardView: View {
             .shadow(color: .black.opacity(0.3), radius: 2, y: 2)
             .scaleEffect(isActive && !reduceMotion ? 1.06 : 1.0)
             .animation(
-                reduceMotion ? nil : .spring(response: 0.25, dampingFraction: 0.7),
+                reduceMotion ? nil : .spring(response: 0.08, dampingFraction: 0.8),
                 value: isActive
             )
             .zIndex(1)

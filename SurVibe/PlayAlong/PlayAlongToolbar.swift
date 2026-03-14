@@ -32,6 +32,12 @@ struct PlayAlongToolbar: View {
     /// Current notation display mode (sargam, western, dual, etc.).
     let notationMode: NotationDisplayMode
 
+    /// Whether a MIDI keyboard is currently connected via USB or Bluetooth.
+    let isMIDIConnected: Bool
+
+    /// Human-readable name of the connected MIDI device, or nil if none.
+    let midiDeviceName: String?
+
     // MARK: - Callbacks
 
     /// Called when the user taps Play or Pause.
@@ -102,40 +108,98 @@ struct PlayAlongToolbar: View {
         .accessibilityHint("Stop playback and return to the beginning")
     }
 
-    /// Tempo scale slider from 0.25x to 1.5x with current value label.
+    /// Tempo controls: preset buttons and a 40%–100% slider.
     private var tempoSlider: some View {
-        HStack(spacing: 4) {
-            Text(PlayAlongToolbar.formatTempoScale(tempoScale))
-                .font(.caption)
-                .monospacedDigit()
-                .frame(width: 40, alignment: .trailing)
-                .accessibilityHidden(true)
-
-            Slider(
-                value: Binding(
-                    get: { tempoScale },
-                    set: { onTempoChange($0) }
-                ),
-                in: 0.25...1.5,
-                step: 0.25
-            )
-            .accessibilityLabel("Tempo scale")
-            .accessibilityValue(PlayAlongToolbar.formatTempoScale(tempoScale))
-            .accessibilityHint("Adjust playback speed from 0.25 times to 1.5 times")
+        VStack(spacing: 4) {
+            // Preset buttons
+            HStack(spacing: 6) {
+                ForEach([0.4, 0.6, 0.8, 1.0], id: \.self) { preset in
+                    Button {
+                        onTempoChange(preset)
+                    } label: {
+                        Text("\(Int(preset * 100))%")
+                            .font(.caption2)
+                            .fontWeight(.semibold)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 3)
+                            .background(
+                                abs(tempoScale - preset) < 0.01
+                                    ? Color.accentColor
+                                    : Color(.tertiarySystemBackground)
+                            )
+                            .foregroundStyle(
+                                abs(tempoScale - preset) < 0.01 ? .white : .primary
+                            )
+                            .clipShape(Capsule())
+                    }
+                    .accessibilityLabel("\(Int(preset * 100)) percent tempo")
+                    .accessibilityHint("Set playback speed to \(Int(preset * 100)) percent")
+                }
+            }
+            // Slider
+            HStack(spacing: 4) {
+                Text(PlayAlongToolbar.formatTempoLabel(tempoScale))
+                    .font(.caption)
+                    .monospacedDigit()
+                    .frame(width: 52, alignment: .trailing)
+                    .accessibilityHidden(true)
+                Slider(
+                    value: Binding(
+                        get: { tempoScale },
+                        set: { onTempoChange($0) }
+                    ),
+                    in: 0.4...1.0,
+                    step: 0.1
+                )
+                .accessibilityLabel("Tempo speed")
+                .accessibilityValue(PlayAlongToolbar.formatTempoLabel(tempoScale))
+                .accessibilityHint("Adjust playback speed from 40 percent to 100 percent")
+            }
         }
     }
 
     // MARK: - Options Row
 
-    /// Wait mode, sound toggle, view mode picker, and notation mode picker.
+    /// Wait mode, sound toggle, MIDI status pill, view mode picker, and notation mode picker.
     private var optionsRow: some View {
         HStack(spacing: 12) {
             waitModeButton
             soundToggleButton
+            midiStatusPill
             Spacer()
             viewModePicker
             notationModePicker
         }
+    }
+
+    /// A non-interactive status pill showing MIDI connection state.
+    ///
+    /// Green dot = MIDI keyboard connected. Gray dot = mic-only mode.
+    private var midiStatusPill: some View {
+        HStack(spacing: 4) {
+            Circle()
+                .fill(isMIDIConnected ? Color.green : Color.secondary.opacity(0.5))
+                .frame(width: 8, height: 8)
+            Text(isMIDIConnected ? (midiDeviceName ?? "MIDI") : "Mic")
+                .font(.caption2)
+                .foregroundStyle(isMIDIConnected ? .primary : .secondary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(
+            isMIDIConnected
+                ? Color.green.opacity(0.12)
+                : Color(.tertiarySystemBackground)
+        )
+        .clipShape(Capsule())
+        .accessibilityLabel(
+            isMIDIConnected
+                ? "MIDI keyboard connected: \(midiDeviceName ?? "unknown device")"
+                : "Microphone input active"
+        )
+        .accessibilityAddTraits(.isStaticText)
     }
 
     /// Toggle for wait mode (pauses until the player hits the correct note).
@@ -257,27 +321,42 @@ struct PlayAlongToolbar: View {
 
     // MARK: - Static Helpers
 
-    /// Format a tempo scale value as a human-readable string.
+    /// Format tempo as "♩ = 72 BPM (60%)" given a scale and base BPM.
     ///
-    /// Clamps the value to the valid range (0.25...1.5) before formatting.
-    /// Values at whole or quarter increments display cleanly (e.g., "1.0x", "0.25x").
-    ///
-    /// - Parameter scale: The tempo multiplier value.
-    /// - Returns: Formatted string like "0.75x" or "1.5x".
-    static func formatTempoScale(_ scale: Double) -> String {
-        let clamped = min(1.5, max(0.25, scale))
-        if clamped == Double(Int(clamped)) {
-            return String(format: "%.1fx", clamped)
-        }
-        return String(format: "%.2gx", clamped)
+    /// - Parameters:
+    ///   - scale: The tempo multiplier (0.4–1.0).
+    ///   - baseBPM: The song's original BPM.
+    /// - Returns: Formatted string like "♩ = 72 BPM (60%)".
+    static func formatTempoBPM(scale: Double, baseBPM: Int) -> String {
+        let effectiveBPM = Int((Double(baseBPM) * scale).rounded())
+        let percent = Int((scale * 100).rounded())
+        return "♩ = \(effectiveBPM) BPM (\(percent)%)"
     }
 
-    /// Clamp a tempo scale value to the valid range.
+    /// Format tempo scale as a short percentage string (e.g. "75%").
+    ///
+    /// - Parameter scale: The tempo multiplier value.
+    /// - Returns: Formatted string like "75%" or "100%".
+    static func formatTempoLabel(_ scale: Double) -> String {
+        "\(Int((scale * 100).rounded()))%"
+    }
+
+    /// Format a tempo scale value as a human-readable string.
+    ///
+    /// Kept for backward compatibility with existing tests.
+    ///
+    /// - Parameter scale: The tempo multiplier value.
+    /// - Returns: Formatted percentage string like "75%".
+    static func formatTempoScale(_ scale: Double) -> String {
+        formatTempoLabel(scale)
+    }
+
+    /// Clamp a tempo scale value to the valid range (40%–100%).
     ///
     /// - Parameter scale: The raw tempo multiplier.
-    /// - Returns: Value clamped to 0.25...1.5.
+    /// - Returns: Value clamped to 0.4...1.0.
     static func clampTempoScale(_ scale: Double) -> Double {
-        min(1.5, max(0.25, scale))
+        min(1.0, max(0.4, scale))
     }
 }
 
@@ -291,6 +370,8 @@ struct PlayAlongToolbar: View {
         isSoundEnabled: true,
         viewMode: .fallingNotes,
         notationMode: .sargam,
+        isMIDIConnected: false,
+        midiDeviceName: nil,
         onPlayPause: {},
         onStop: {},
         onTempoChange: { _ in },
@@ -301,7 +382,7 @@ struct PlayAlongToolbar: View {
     )
 }
 
-#Preview("Toolbar — Playing") {
+#Preview("Toolbar — MIDI Connected") {
     PlayAlongToolbar(
         playbackState: .playing,
         tempoScale: 0.75,
@@ -309,6 +390,8 @@ struct PlayAlongToolbar: View {
         isSoundEnabled: false,
         viewMode: .scrollingSheet,
         notationMode: .dual,
+        isMIDIConnected: true,
+        midiDeviceName: "Yamaha PSR-400",
         onPlayPause: {},
         onStop: {},
         onTempoChange: { _ in },
