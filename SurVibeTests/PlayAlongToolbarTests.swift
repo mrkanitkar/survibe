@@ -1,0 +1,153 @@
+import Testing
+
+@testable import SurVibe
+
+// MARK: - Play/Pause Icon Tests
+
+struct PlayAlongToolbarIconTests {
+
+    @Test func idleStateShowsPlayIcon() {
+        let icon = PlayAlongToolbar.playPauseIcon(for: .idle)
+        #expect(icon == "play.fill")
+    }
+
+    @Test func playingStateShowsPauseIcon() {
+        let icon = PlayAlongToolbar.playPauseIcon(for: .playing)
+        #expect(icon == "pause.fill")
+    }
+
+    @Test func pausedStateShowsPlayIcon() {
+        let icon = PlayAlongToolbar.playPauseIcon(for: .paused)
+        #expect(icon == "play.fill")
+    }
+
+    @Test func stoppedStateShowsPlayIcon() {
+        let icon = PlayAlongToolbar.playPauseIcon(for: .stopped)
+        #expect(icon == "play.fill")
+    }
+
+    @Test func loadingStateShowsPlayIcon() {
+        let icon = PlayAlongToolbar.playPauseIcon(for: .loading)
+        #expect(icon == "play.fill")
+    }
+
+    @Test func errorStateShowsPlayIcon() {
+        let icon = PlayAlongToolbar.playPauseIcon(for: .error("Something went wrong"))
+        #expect(icon == "play.fill")
+    }
+}
+
+// MARK: - Tempo Scale Tests
+
+struct PlayAlongToolbarTempoTests {
+
+    @Test func tempoScaleClampedToMinimum() {
+        let clamped = PlayAlongToolbar.clampTempoScale(0.1)
+        #expect(clamped == 0.25)
+    }
+
+    @Test func tempoScaleClampedToMaximum() {
+        let clamped = PlayAlongToolbar.clampTempoScale(3.0)
+        #expect(clamped == 1.5)
+    }
+
+    @Test func tempoScaleWithinRangeUnchanged() {
+        let clamped = PlayAlongToolbar.clampTempoScale(0.75)
+        #expect(clamped == 0.75)
+    }
+
+    @Test func tempoScaleMinBoundary() {
+        let clamped = PlayAlongToolbar.clampTempoScale(0.25)
+        #expect(clamped == 0.25)
+    }
+
+    @Test func tempoScaleMaxBoundary() {
+        let clamped = PlayAlongToolbar.clampTempoScale(1.5)
+        #expect(clamped == 1.5)
+    }
+
+    @Test func tempoScaleNegativeClampedToMinimum() {
+        let clamped = PlayAlongToolbar.clampTempoScale(-1.0)
+        #expect(clamped == 0.25)
+    }
+
+    @Test func formatTempoScaleShowsOneDecimalForWholeNumbers() {
+        let formatted = PlayAlongToolbar.formatTempoScale(1.0)
+        #expect(formatted == "1.0x" || formatted == "1x")
+    }
+
+    @Test func formatTempoScaleShowsFractions() {
+        let formatted = PlayAlongToolbar.formatTempoScale(0.75)
+        #expect(formatted.contains("0.75"))
+    }
+
+    @Test func formatTempoScaleClampsBelowMinimum() {
+        let formatted = PlayAlongToolbar.formatTempoScale(0.1)
+        #expect(formatted.contains("0.25"))
+    }
+
+    @Test func formatTempoScaleClampsAboveMaximum() {
+        let formatted = PlayAlongToolbar.formatTempoScale(5.0)
+        #expect(formatted.contains("1.5"))
+    }
+}
+
+// MARK: - View Mode Tests
+
+struct PlayAlongViewModeTests {
+
+    @Test func allCasesContainsBothModes() {
+        #expect(PlayAlongViewMode.allCases.count == 2)
+        #expect(PlayAlongViewMode.allCases.contains(.fallingNotes))
+        #expect(PlayAlongViewMode.allCases.contains(.scrollingSheet))
+    }
+
+    @Test func fallingNotesHasLabel() {
+        #expect(!PlayAlongViewMode.fallingNotes.label.isEmpty)
+    }
+
+    @Test func scrollingSheetHasLabel() {
+        #expect(!PlayAlongViewMode.scrollingSheet.label.isEmpty)
+    }
+
+    @Test func fallingNotesHasIcon() {
+        #expect(!PlayAlongViewMode.fallingNotes.iconName.isEmpty)
+    }
+
+    @Test func scrollingSheetHasIcon() {
+        #expect(!PlayAlongViewMode.scrollingSheet.iconName.isEmpty)
+    }
+
+    @Test func rawValueRoundTrips() {
+        for mode in PlayAlongViewMode.allCases {
+            #expect(PlayAlongViewMode(rawValue: mode.rawValue) == mode)
+        }
+    }
+}
+
+// MARK: - Notation Mode Cycling Tests
+
+struct NotationModeCyclingTests {
+
+    @Test func allNotationModesAvailable() {
+        #expect(NotationDisplayMode.allCases.count == 5)
+    }
+
+    @Test func notationModeRawValueRoundTrips() {
+        for mode in NotationDisplayMode.allCases {
+            #expect(NotationDisplayMode(rawValue: mode.rawValue) == mode)
+        }
+    }
+
+    @Test func eachNotationModeHasNonEmptyLabel() {
+        for mode in NotationDisplayMode.allCases {
+            #expect(!mode.label.isEmpty, "Mode \(mode) should have a non-empty label")
+        }
+    }
+
+    @Test func eachNotationModeHasNonEmptyIcon() {
+        for mode in NotationDisplayMode.allCases {
+            #expect(!mode.iconName.isEmpty, "Mode \(mode) should have a non-empty icon name")
+        }
+    }
+}

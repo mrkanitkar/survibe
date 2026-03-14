@@ -26,11 +26,35 @@ struct InteractivePianoView: View {
     /// Cents offset for tuning accuracy color on detected notes.
     let activeCentsOffset: Double
 
+    /// The expected next note to play, highlighted in amber/orange for guidance.
+    /// Shown in guided free-play mode so the user knows which key to press.
+    var expectedMidiNote: Int? = nil
+
     /// Whether latching mode is enabled (keys stay held until retapped).
     var isLatchingEnabled: Bool = false
 
     /// Callback to clear all latched notes (called from parent view).
     var onClearLatched: (() -> Void)?
+
+    /// Callback fired when a key is pressed, passing the MIDI note number.
+    ///
+    /// Used by play-along mode to route keyboard input to the scoring engine.
+    /// Optional so existing call sites (Practice tab) are unaffected.
+    var onNoteOn: ((Int) -> Void)?
+
+    /// Controls which label system is shown on white keys.
+    ///
+    /// Defaults to `.dual` so all existing call sites continue to show both
+    /// Devanagari and Western labels without any changes at the call site.
+    var notationMode: NotationDisplayMode = .dual
+
+    /// Whether this view should eagerly load the SoundFont on appearance.
+    ///
+    /// Set to `false` when the parent view manages its own SoundFont loading
+    /// (e.g. `SongPlayAlongView`), to avoid starting the engine in
+    /// `.playbackOnly` mode before pitch detection has a chance to start it
+    /// in `.playAndRecord` mode.
+    var manageSoundFont: Bool = true
 
     // MARK: - Internal State
 
@@ -70,10 +94,25 @@ struct InteractivePianoView: View {
         }
         .environment(\.layoutDirection, .leftToRight)
         .frame(height: 160)
+        .overlay {
+            GeometryReader { geo in
+                Color.clear
+                    .preference(
+                        key: KeyPositionPreference.self,
+                        value: Self.computeKeyPositions(
+                            width: geo.size.width,
+                            startMIDI: 36,
+                            endMIDI: 96
+                        )
+                    )
+            }
+        }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Interactive piano keyboard, 61 keys")
         .task {
-            await loadSoundFontIfNeeded()
+            if manageSoundFont {
+                await loadSoundFontIfNeeded()
+            }
         }
     }
 
@@ -96,7 +135,7 @@ struct InteractivePianoView: View {
         }
         .scaleEffect(hasHighlight && !reduceMotion ? (isNatural ? 1.04 : 1.06) : 1.0)
         .animation(
-            reduceMotion ? nil : .spring(response: 0.25, dampingFraction: 0.7),
+            reduceMotion ? nil : .spring(response: 0.08, dampingFraction: 0.85),
             value: hasHighlight
         )
         .accessibilityLabel(keyAccessibilityLabel(midi: midi, noteIndex: noteIndex))
@@ -119,24 +158,36 @@ struct InteractivePianoView: View {
         }
     }
 
-    /// Labels for white keys: Western name, octave number on C keys, and Devanagari.
+    /// Labels for white keys.
+    ///
+    /// Respects `notationMode`:
+    /// - `.sargam` / `.sargamPlusSheet`: Devanagari label only (no Western name)
+    /// - `.western` / `.sheetMusic`: Western name + octave number only (no Devanagari)
+    /// - `.dual` (default): Western name above, Devanagari below (existing behavior)
     private func whiteKeyLabels(midi: Int, noteIndex: Int, hasHighlight: Bool) -> some View {
-        VStack(spacing: 1) {
+        let octave = Int(floor(Double(midi - 60) / 12.0)) + 4
+        let westernName = Self.westernNames[noteIndex]
+        let westernLabel = noteIndex == 0 ? "\(westernName)\(octave)" : westernName
+
+        return VStack(spacing: 1) {
             Spacer()
-            let octave = Int(floor(Double(midi - 60) / 12.0)) + 4
-            let westernName = Self.westernNames[noteIndex]
-            if noteIndex == 0 {
-                Text(verbatim: "\(westernName)\(octave)")
-                    .font(.system(size: 11, weight: hasHighlight ? .bold : .semibold))
+            switch notationMode {
+            case .sargam, .sargamPlusSheet:
+                Text(verbatim: Self.devanagariLabels[noteIndex])
+                    .font(.system(size: 10, weight: hasHighlight ? .bold : .regular))
                     .foregroundStyle(hasHighlight ? .white : .primary)
-            } else {
-                Text(verbatim: westernName)
-                    .font(.system(size: 11, weight: hasHighlight ? .bold : .regular))
+            case .western, .sheetMusic:
+                Text(verbatim: westernLabel)
+                    .font(.system(size: 11, weight: hasHighlight ? .bold : (noteIndex == 0 ? .semibold : .regular)))
                     .foregroundStyle(hasHighlight ? .white : .primary)
+            case .dual:
+                Text(verbatim: westernLabel)
+                    .font(.system(size: 11, weight: hasHighlight ? .bold : (noteIndex == 0 ? .semibold : .regular)))
+                    .foregroundStyle(hasHighlight ? .white : .primary)
+                Text(verbatim: Self.devanagariLabels[noteIndex])
+                    .font(.system(size: 9))
+                    .foregroundStyle(hasHighlight ? .white.opacity(0.9) : .secondary)
             }
-            Text(verbatim: Self.devanagariLabels[noteIndex])
-                .font(.system(size: 9))
-                .foregroundStyle(hasHighlight ? .white.opacity(0.9) : .secondary)
             Spacer().frame(height: 6)
         }
     }
@@ -149,12 +200,14 @@ struct InteractivePianoView: View {
     private func highlightColor(for midiNote: Int) -> Color? {
         let isDetected = activeMidiNotes.contains(midiNote)
         let isTouched = touchedMidiNotes.contains(midiNote)
+        let isExpected = expectedMidiNote == midiNote
 
         switch (isDetected, isTouched) {
         case (true, true): return .cyan
         case (true, false): return .blue
         case (false, true): return .green
-        case (false, false): return nil
+        case (false, false):
+            return isExpected ? .orange : nil
         }
     }
 
@@ -172,10 +225,14 @@ struct InteractivePianoView: View {
     // MARK: - Callbacks
 
     /// Handle noteOn from AudioKit Keyboard.
+    ///
+    /// Plays the note via SoundFont and notifies the parent view (if a callback
+    /// is provided) so that play-along scoring can process the input.
     private func handleNoteOn(_ pitch: Pitch, _ point: CGPoint) {
         let midi = UInt8(clamping: Int(pitch.midiNoteNumber))
         touchedMidiNotes.insert(Int(midi))
         SoundFontManager.shared.playNote(midiNote: midi, velocity: 100)
+        onNoteOn?(Int(midi))
     }
 
     /// Handle noteOff from AudioKit Keyboard.
@@ -191,6 +248,52 @@ struct InteractivePianoView: View {
             SoundFontManager.shared.stopNote(midiNote: UInt8(clamping: midi))
         }
         touchedMidiNotes.removeAll()
+    }
+
+    // MARK: - Key Position Computation
+
+    /// Compute center-X positions for all keys in the piano range.
+    ///
+    /// Uses the standard piano layout geometry to calculate each key's
+    /// horizontal center position. White keys are evenly spaced; black keys
+    /// sit between their adjacent white keys at the boundary.
+    ///
+    /// - Parameters:
+    ///   - width: Total keyboard width in points.
+    ///   - startMIDI: First MIDI note (inclusive).
+    ///   - endMIDI: Last MIDI note (inclusive).
+    /// - Returns: Array of `KeyPosition` values for all keys in range.
+    nonisolated private static func computeKeyPositions(
+        width: CGFloat,
+        startMIDI: Int,
+        endMIDI: Int
+    ) -> [KeyPosition] {
+        // Local copy avoids referencing @MainActor-isolated static property
+        let naturals: Set<Int> = [0, 2, 4, 5, 7, 9, 11]
+        let whiteKeyCount = (startMIDI...endMIDI)
+            .filter { naturals.contains((($0 - 60) % 12 + 12) % 12) }
+            .count
+        guard whiteKeyCount > 0 else { return [] }
+        let whiteKeyWidth = width / CGFloat(whiteKeyCount)
+
+        var positions: [KeyPosition] = []
+        var whiteKeyIndex = 0
+
+        for midi in startMIDI...endMIDI {
+            let noteIndex = ((midi - 60) % 12 + 12) % 12
+            let isNatural = naturals.contains(noteIndex)
+
+            if isNatural {
+                let centerX = (CGFloat(whiteKeyIndex) + 0.5) * whiteKeyWidth
+                positions.append(KeyPosition(midiNote: UInt8(midi), centerX: centerX))
+                whiteKeyIndex += 1
+            } else {
+                // Black key center sits at the boundary between adjacent white keys
+                let centerX = CGFloat(whiteKeyIndex) * whiteKeyWidth
+                positions.append(KeyPosition(midiNote: UInt8(midi), centerX: centerX))
+            }
+        }
+        return positions
     }
 
     // MARK: - SoundFont Loading

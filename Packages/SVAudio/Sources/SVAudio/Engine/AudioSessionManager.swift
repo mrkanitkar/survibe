@@ -40,7 +40,14 @@ public final class AudioSessionManager {
     }
 
     /// Configure audio session for simultaneous playback and recording.
-    /// Sets preferred sample rate to 44100 Hz and IO buffer duration for 2048 frames.
+    ///
+    /// Uses a 256-frame I/O buffer (~5.8ms at 44100 Hz) to minimise
+    /// SoundFont playback latency for MIDI-triggered notes. Pitch detection
+    /// in `PracticeAudioProcessor` accumulates its own internal buffer, so it
+    /// is unaffected by this smaller hardware I/O window.
+    ///
+    /// A 46ms buffer (2048 frames) was unnecessarily large; professional
+    /// MIDI playback apps typically use 128–256 frames.
     public func configure() throws {
         try session.setCategory(
             .playAndRecord,
@@ -49,8 +56,9 @@ public final class AudioSessionManager {
         )
         // Request 44100 Hz sample rate per spec
         try session.setPreferredSampleRate(44100)
-        // Request buffer duration matching 2048 frames at 44100 Hz (~46ms)
-        try session.setPreferredIOBufferDuration(2048.0 / 44100.0)
+        // 256 frames at 44100 Hz ≈ 5.8 ms — low-latency for MIDI-triggered SoundFont playback.
+        // PracticeAudioProcessor accumulates its own buffer, so pitch detection is unaffected.
+        try session.setPreferredIOBufferDuration(256.0 / 44100.0)
         try session.setActive(true)
     }
 
