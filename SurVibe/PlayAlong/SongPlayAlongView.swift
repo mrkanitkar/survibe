@@ -69,6 +69,7 @@ struct SongPlayAlongView: View {
                 notationMode: viewModel.notationMode,
                 isMIDIConnected: viewModel.isMIDIConnected,
                 midiDeviceName: viewModel.midiDeviceName,
+                latencyPreset: viewModel.latencyPreset,
                 onPlayPause: handlePlayPause,
                 onStop: handleStop,
                 onTempoChange: { viewModel.tempoScale = $0 },
@@ -84,7 +85,8 @@ struct SongPlayAlongView: View {
                 onNotationModeChange: {
                     viewModel.notationMode = $0
                     storedNotationMode = $0.rawValue
-                }
+                },
+                onLatencyPresetChange: { viewModel.latencyPreset = $0 }
             )
 
             // Main content area — switches between visual modes

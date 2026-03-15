@@ -98,6 +98,24 @@ final class PlayAlongViewModel {
     /// Notation label display mode (Sargam, Western, dual, etc.).
     var notationMode: NotationDisplayMode = .sargam
 
+    /// Latency preset for mic pitch detection (controls FFT buffer size for chord detection).
+    ///
+    /// Persisted across sessions. Changing this value while detection is active
+    /// restarts the pitch detection pipeline with the new buffer size.
+    var latencyPreset: LatencyPreset = {
+        let raw = UserDefaults.standard.string(forKey: "com.survibe.playAlong.latencyPreset") ?? ""
+        return LatencyPreset(rawValue: raw) ?? .fast
+    }() {
+        didSet {
+            UserDefaults.standard.set(latencyPreset.rawValue, forKey: "com.survibe.playAlong.latencyPreset")
+            // Restart pitch detection with the new buffer size
+            if audioProcessor.isActive {
+                audioProcessor.stop()
+                startPitchDetection()
+            }
+        }
+    }
+
     /// Latest pitch detection result for live UI feedback (nil when no input detected).
     private(set) var currentPitch: PitchResult?
 
@@ -200,6 +218,12 @@ final class PlayAlongViewModel {
 
     /// The loaded Song model.
     private var song: Song?
+
+    /// Ring buffer for accumulating audio samples for FFT chord detection.
+    ///
+    /// Sized to `latencyPreset.realSamples * 2` on each detection start.
+    /// Written by the mic tap callback; read by the DSP loop in `PracticeAudioProcessor`.
+    private var ringBuffer: AudioRingBuffer?
 
     /// Task running the note-by-note playback scheduler.
     private var playbackTask: Task<Void, Never>?
@@ -597,6 +621,8 @@ final class PlayAlongViewModel {
         metronome.stop()
         waitController?.reset()
         waitController = nil
+        audioProcessor.ringBuffer = nil
+        ringBuffer = nil
         audioProcessor.stop()
         pitchDetectionTask?.cancel()
         pitchDetectionTask = nil
@@ -713,20 +739,32 @@ final class PlayAlongViewModel {
 
     /// Start real-time pitch detection from the microphone.
     ///
-    /// Starts `PracticeAudioProcessor` and launches a task that reads
-    /// each `PitchResult` from the async stream. The detected pitch is:
-    /// 1. Enriched with raga context (JI cents mapping) when available.
-    /// 2. Exposed as `currentPitch` for live UI feedback and keyboard highlight.
-    /// 3. Converted to a MIDI note and routed to `handleNoteDetected` during active sessions.
+    /// Starts `PracticeAudioProcessor` and launches two concurrent detection tasks:
+    /// 1. **Melody task** — reads `PitchResult` from the processor's async stream,
+    ///    enriches with raga context, updates `currentPitch`, and routes to scoring.
+    /// 2. **Chord task** — accumulates audio samples in an `AudioRingBuffer` sized
+    ///    by `latencyPreset`, runs `ChromagramDSP.analyzeChord` every 50 ms, and
+    ///    exposes results via `audioProcessor.ringBufferRef` for multi-note display.
+    ///
+    /// The ring buffer is fed by a secondary tap on `AudioEngineManager` that runs
+    /// alongside the `PracticeAudioProcessor` tap (both coexist on different node taps).
     ///
     /// Detection starts at song load so users can play immediately without pressing Play.
     private func startPitchDetection() {
-        // Cancel the existing consumer task. If the processor is already active
-        // (mic tap installed, stream live), we reuse it — there is no reason to
-        // tear down and reinstall the mic tap just to attach a new reader task.
-        // Only restart the processor when it is not yet running.
+        // Cancel existing consumer tasks. Only restart the processor when it is not
+        // yet running — reinstalling the mic tap unnecessarily causes a dropout.
         pitchDetectionTask?.cancel()
         pitchDetectionTask = nil
+
+        // Allocate a fresh ring buffer sized to the current latency preset.
+        // Capacity = realSamples * 2 so we always have a full window available.
+        let preset = latencyPreset
+        let newRingBuffer = AudioRingBuffer(capacity: preset.realSamples * 2)
+        ringBuffer = newRingBuffer
+
+        // Give PracticeAudioProcessor the ring buffer reference BEFORE start(),
+        // so the tap closure captures it when it is installed during start().
+        audioProcessor.ringBuffer = newRingBuffer
 
         if !audioProcessor.isActive {
             do {
@@ -736,6 +774,13 @@ final class PlayAlongViewModel {
                 return
             }
         }
+
+        Self.logger.info(
+            "Pitch detection started: preset=\(preset.rawValue) realSamples=\(preset.realSamples)"
+        )
+
+        // --- Melody detection task ---
+        // Reads PitchResult from PracticeAudioProcessor's autocorrelation stream.
         pitchDetectionTask = Task { [weak self] in
             guard let self else { return }
             for await pitchResult in self.audioProcessor.pitchStream {
@@ -749,7 +794,12 @@ final class PlayAlongViewModel {
                    enriched.confidence >= PracticeConstants.confidenceThreshold {
                     self.currentPitch = enriched
                     let midiNote = Self.midiNoteFromFrequency(enriched.frequency)
-                    self.detectedMidiNotes = [midiNote]
+
+                    // Only update detectedMidiNotes from mic when MIDI keyboard is not connected.
+                    // MIDI keyboard takes priority for note highlighting.
+                    if !self.isMIDIConnected {
+                        self.detectedMidiNotes = [midiNote]
+                    }
 
                     if self.playbackState == .playing {
                         // Timed playback mode: score against the playback-driven note index
@@ -760,9 +810,38 @@ final class PlayAlongViewModel {
                     }
                 } else {
                     self.currentPitch = nil
-                    self.detectedMidiNotes = []
+                    if !self.isMIDIConnected {
+                        self.detectedMidiNotes = []
+                    }
                     // Silence clears the last-scored note so the next onset is fresh
                     self.lastGuidedMidiNote = nil
+                }
+            }
+        }
+
+        // --- Chord detection task (FFT chromagram via ChromagramDSP) ---
+        // Runs independently of melody — reads from the ring buffer every 50 ms
+        // and updates detectedMidiNotes with all simultaneously-sounding pitch classes.
+        Task { [weak self] in
+            guard let self else { return }
+            let buf = self.ringBuffer
+            let realSamples = preset.realSamples
+            let refPitch = 440.0
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(50))
+                guard let buf,
+                      let samples = buf.read(count: realSamples) else { continue }
+                let result = ChromagramDSP.analyzeChord(
+                    samples: samples,
+                    sampleRate: 44100,
+                    referencePitch: refPitch
+                )
+                guard !result.detectedPitches.isEmpty else { continue }
+                // Only update keyboard highlights from chord data when MIDI is not connected
+                // and there are multiple distinct pitches (i.e., actual chord playing).
+                if !self.isMIDIConnected, result.detectedPitches.count > 1 {
+                    let midiNotes = Set(result.detectedPitches.map { $0.midiNote })
+                    self.detectedMidiNotes = midiNotes
                 }
             }
         }

@@ -95,6 +95,14 @@ public final class PracticeAudioProcessor {
     /// Reference pitch for frequency-to-note conversion (A4, in Hz).
     public var referencePitch: Double = 440.0
 
+    /// Optional ring buffer to receive a copy of all mic samples.
+    ///
+    /// When set, every audio frame delivered to the mic tap is also written
+    /// into this buffer so callers can run FFT-based chord detection
+    /// (e.g. `ChromagramDSP.analyzeChord`) on a larger, accumulated window.
+    /// Set to `nil` to disable. The ring buffer is `Sendable` and thread-safe.
+    public var ringBuffer: AudioRingBuffer?
+
     /// Minimum RMS amplitude to consider a buffer worth analyzing.
     ///
     /// 0.005 (~0.5% of full scale) is appropriate for acoustic instruments
@@ -146,6 +154,10 @@ public final class PracticeAudioProcessor {
         // Install mic tap — audio callback extracts samples into a Sendable snapshot
         let buffer = sharedBuffer
         let tapLogger = Self.logger
+        // Capture ringBuffer as a Sendable reference so it can be written on
+        // the audio thread. The caller sets self.ringBuffer BEFORE calling start(),
+        // so the initial value is captured here and remains valid for the tap lifetime.
+        let capturedRingBuffer = ringBuffer
         let installed = AudioEngineManager.shared.installMicTap { pcmBuffer, _ in
             guard let channelData = pcmBuffer.floatChannelData?[0] else {
                 tapLogger.error("installMicTap callback: no float channel data")
@@ -162,6 +174,8 @@ public final class PracticeAudioProcessor {
                 sampleRate: pcmBuffer.format.sampleRate
             )
             buffer.write(snapshot)
+            // Also feed the ring buffer for FFT chord detection (if one is attached).
+            capturedRingBuffer?.write(samples)
         }
 
         guard installed else {

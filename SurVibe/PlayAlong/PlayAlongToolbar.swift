@@ -1,3 +1,4 @@
+import SVAudio
 import SwiftUI
 
 /// Top toolbar providing play-along transport controls, tempo adjustment,
@@ -38,6 +39,9 @@ struct PlayAlongToolbar: View {
     /// Human-readable name of the connected MIDI device, or nil if none.
     let midiDeviceName: String?
 
+    /// Current latency preset for mic pitch detection.
+    let latencyPreset: LatencyPreset
+
     // MARK: - Callbacks
 
     /// Called when the user taps Play or Pause.
@@ -60,6 +64,9 @@ struct PlayAlongToolbar: View {
 
     /// Called when the user changes the notation mode.
     var onNotationModeChange: (NotationDisplayMode) -> Void
+
+    /// Called when the user selects a different latency preset.
+    var onLatencyPresetChange: (LatencyPreset) -> Void
 
     // MARK: - Body
 
@@ -160,13 +167,14 @@ struct PlayAlongToolbar: View {
 
     // MARK: - Options Row
 
-    /// Wait mode, sound toggle, MIDI status pill, view mode picker, and notation mode picker.
+    /// Wait mode, sound toggle, MIDI status pill, latency menu, view mode picker, and notation mode picker.
     private var optionsRow: some View {
         HStack(spacing: 12) {
             waitModeButton
             soundToggleButton
             midiStatusPill
             Spacer()
+            latencyPresetMenu
             viewModePicker
             notationModePicker
         }
@@ -226,6 +234,35 @@ struct PlayAlongToolbar: View {
         }
         .accessibilityLabel(isSoundEnabled ? "Sound on" : "Sound off")
         .accessibilityHint("Toggle reference audio playback")
+    }
+
+    /// Menu for selecting the mic detection latency preset.
+    ///
+    /// Mirrors the latency menu on the Practice tab — 4 presets from ~23ms
+    /// (Ultra Fast, lowest accuracy) to ~186ms (Precise, highest accuracy).
+    private var latencyPresetMenu: some View {
+        Menu {
+            ForEach(LatencyPreset.allCases, id: \.self) { preset in
+                Button {
+                    onLatencyPresetChange(preset)
+                } label: {
+                    HStack {
+                        Text(preset.displayName)
+                        if preset == latencyPreset {
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
+                .accessibilityLabel(preset.displayName)
+            }
+        } label: {
+            Image(systemName: "waveform.badge.magnifyingglass")
+                .font(.body)
+                .frame(width: 36, height: 36)
+        }
+        .accessibilityLabel("Detection latency")
+        .accessibilityValue(latencyPreset.displayName)
+        .accessibilityHint("Select mic detection speed vs accuracy tradeoff")
     }
 
     /// Picker to switch between falling notes and scrolling sheet modes.
@@ -372,13 +409,15 @@ struct PlayAlongToolbar: View {
         notationMode: .sargam,
         isMIDIConnected: false,
         midiDeviceName: nil,
+        latencyPreset: .fast,
         onPlayPause: {},
         onStop: {},
         onTempoChange: { _ in },
         onWaitModeToggle: {},
         onSoundToggle: {},
         onViewModeChange: { _ in },
-        onNotationModeChange: { _ in }
+        onNotationModeChange: { _ in },
+        onLatencyPresetChange: { _ in }
     )
 }
 
@@ -392,12 +431,14 @@ struct PlayAlongToolbar: View {
         notationMode: .dual,
         isMIDIConnected: true,
         midiDeviceName: "Yamaha PSR-400",
+        latencyPreset: .balanced,
         onPlayPause: {},
         onStop: {},
         onTempoChange: { _ in },
         onWaitModeToggle: {},
         onSoundToggle: {},
         onViewModeChange: { _ in },
-        onNotationModeChange: { _ in }
+        onNotationModeChange: { _ in },
+        onLatencyPresetChange: { _ in }
     )
 }
