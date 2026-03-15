@@ -271,11 +271,13 @@ struct FallingNotesLayoutEngineTests {
     }
 
     @Test func noteXReturnsNilForMissingKey() {
+        // MIDI 20 is outside the fallback range (36–96), so nil is returned
+        // when there is no matching position entry.
         let positions = [
             KeyPosition(midiNote: 60, centerX: 100),
             KeyPosition(midiNote: 62, centerX: 150),
         ]
-        let x = FallingNotesLayoutEngine.noteX(midiNote: 65, keyPositions: positions)
+        let x = FallingNotesLayoutEngine.noteX(midiNote: 20, keyPositions: positions)
         #expect(x == nil)
     }
 

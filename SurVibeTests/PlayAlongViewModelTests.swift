@@ -354,16 +354,15 @@ struct PlayAlongViewModelTests {
         }
     }
 
-    @Test("handleKeyboardTouch when not playing does nothing")
+    @Test("handleKeyboardTouch before any song is loaded does not record scores")
     func handleKeyboardTouchWhenNotPlayingDoesNothing() async {
         let sut = makeSUT()
         let vm = sut.vm
-        let song = makeNotationSong()
-        await vm.loadSong(song)
-
+        // No loadSong — playbackState is .idle with no noteEvents.
+        // handleGuidedNoteDetected guards on currentNoteIndex != nil,
+        // which is nil when no song is loaded, so no score is recorded.
         vm.handleKeyboardTouch(midiNote: 60)
 
-        // No scores should be recorded when not playing
         #expect(vm.noteScores.isEmpty)
     }
 
