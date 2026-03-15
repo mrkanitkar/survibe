@@ -54,4 +54,16 @@ public enum AnalyticsEvent: String, Sendable {
     case playAlongStarted = "play_along_started"
     case playAlongCompleted = "play_along_completed"
     case playAlongAbandoned = "play_along_abandoned"
+
+    // Song Import events
+    case songImportStarted = "song_import_started"
+    case songImportCompleted = "song_import_completed"
+    case songImportFailed = "song_import_failed"
+    case importMidiPlaybackStarted = "import_midi_playback_started"
+    case songImportSynced = "song_import_synced"
+    case songImportWarningDisplayed = "song_import_warning_displayed"
+
+    // Song CRUD events (user-imported songs)
+    case songEdited = "song_edited"
+    case songDeleted = "song_deleted"
 }

@@ -159,6 +159,9 @@ final class Song {
     /// Whether the user has marked this song as a favorite.
     var isFavorite: Bool = false
 
+    /// Source of the song — "admin" for built-in content, "user" for user-imported songs.
+    var source: String = "admin"
+
     /// Display order in the song library (ascending).
     var sortOrder: Int = 0
 

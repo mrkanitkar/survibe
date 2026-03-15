@@ -1,4 +1,5 @@
 import SVCore
+import SVLearning
 import SwiftUI
 
 /// The main song library grid view with search, filters, and sort.
@@ -19,6 +20,15 @@ struct SongLibraryView: View {
 
     /// Song for which to show the detail sheet (via long-press context menu).
     @State private var detailSong: Song?
+
+    /// Controls the song import sheet.
+    @State private var showImportSheet: Bool = false
+
+    /// Song to open in the edit sheet (user songs only).
+    @State private var songToEdit: Song?
+
+    /// Song pending delete confirmation (user songs only).
+    @State private var songToDelete: Song?
 
     /// Two-column adaptive grid.
     private let columns = [
@@ -49,6 +59,10 @@ struct SongLibraryView: View {
         .searchable(text: $vm.searchText, prompt: Text("Search songs, artists, ragas..."))
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
+                uploadButton
+            }
+
+            ToolbarItem(placement: .topBarTrailing) {
                 sortMenu
             }
 
@@ -62,6 +76,34 @@ struct SongLibraryView: View {
         .sheet(item: $detailSong) { song in
             NavigationStack {
                 SongDetailView(song: song)
+            }
+        }
+        .sheet(isPresented: $showImportSheet) {
+            SongImportSheet()
+                .environment(viewModel)
+        }
+        .sheet(item: $songToEdit) { song in
+            NavigationStack {
+                SongEditView(song: song)
+                    .environment(viewModel)
+            }
+        }
+        .alert("Delete Song", isPresented: Binding(
+            get: { songToDelete != nil },
+            set: { if !$0 { songToDelete = nil } }
+        )) {
+            Button("Delete", role: .destructive) {
+                if let song = songToDelete {
+                    viewModel.deleteSong(song)
+                    songToDelete = nil
+                }
+            }
+            Button("Cancel", role: .cancel) {
+                songToDelete = nil
+            }
+        } message: {
+            if let song = songToDelete {
+                Text("Are you sure you want to delete \"\(song.title)\"? This cannot be undone.")
             }
         }
         .task {
@@ -91,6 +133,18 @@ struct SongLibraryView: View {
                                 detailSong = song
                             } label: {
                                 Label("Song Details", systemImage: "info.circle")
+                            }
+                            if song.source == "user" {
+                                Button {
+                                    songToEdit = song
+                                } label: {
+                                    Label("Edit Song", systemImage: "pencil")
+                                }
+                                Button(role: .destructive) {
+                                    songToDelete = song
+                                } label: {
+                                    Label("Delete Song", systemImage: "trash")
+                                }
                             }
                         }
                     }
@@ -148,5 +202,16 @@ struct SongLibraryView: View {
                     .fill(Color(.tertiarySystemBackground))
             )
             .accessibilityLabel(Text("\(viewModel.filteredSongs.count) songs"))
+    }
+
+    /// Upload Song toolbar button.
+    private var uploadButton: some View {
+        Button {
+            showImportSheet = true
+        } label: {
+            Image(systemName: "square.and.arrow.down")
+                .accessibilityLabel(Text("Import song"))
+                .accessibilityHint(Text("Double tap to import a new song"))
+        }
     }
 }

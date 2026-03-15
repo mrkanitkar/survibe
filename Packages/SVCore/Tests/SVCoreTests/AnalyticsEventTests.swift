@@ -22,4 +22,14 @@ struct AnalyticsEventTests {
         #expect(AnalyticsEvent.audioPocPitchDetected.rawValue == "audio_poc_pitch_detected")
         #expect(AnalyticsEvent.cloudKitSyncCompleted.rawValue == "cloudkit_sync_completed")
     }
+
+    @Test("Song Import events have correct raw values")
+    func songImportEventsHaveCorrectRawValues() {
+        #expect(AnalyticsEvent.songImportStarted.rawValue == "song_import_started")
+        #expect(AnalyticsEvent.songImportCompleted.rawValue == "song_import_completed")
+        #expect(AnalyticsEvent.songImportFailed.rawValue == "song_import_failed")
+        #expect(AnalyticsEvent.importMidiPlaybackStarted.rawValue == "import_midi_playback_started")
+        #expect(AnalyticsEvent.songImportSynced.rawValue == "song_import_synced")
+        #expect(AnalyticsEvent.songImportWarningDisplayed.rawValue == "song_import_warning_displayed")
+    }
 }

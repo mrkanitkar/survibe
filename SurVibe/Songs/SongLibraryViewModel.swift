@@ -1,5 +1,6 @@
 import Foundation
 import SVCore
+import SVLearning
 import SwiftData
 import SwiftUI
 
@@ -40,6 +41,9 @@ final class SongLibraryViewModel {
     /// Whether to show only favorites.
     var showFavoritesOnly: Bool = false
 
+    /// Active source filter: nil = all songs, "user" = imported only, "admin" = built-in only.
+    var activeSourceFilter: String?
+
     /// Current sort option.
     var sortOption: SongSortOption = .difficultyAscending
 
@@ -75,6 +79,12 @@ final class SongLibraryViewModel {
             || activeDifficultyFilter != nil
             || !activeRaagFilters.isEmpty
             || showFavoritesOnly
+            || activeSourceFilter != nil
+    }
+
+    /// Songs filtered to show only user-imported songs (source == "user").
+    var userSongs: [Song] {
+        allSongs.filter { $0.source == "user" }
     }
 
     // MARK: - Initialization
@@ -125,6 +135,11 @@ final class SongLibraryViewModel {
         // Raga filters
         if !activeRaagFilters.isEmpty {
             result = result.filter { activeRaagFilters.contains($0.ragaName) }
+        }
+
+        // Source filter
+        if let source = activeSourceFilter {
+            result = result.filter { $0.source == source }
         }
 
         // Favorites only
@@ -211,6 +226,7 @@ final class SongLibraryViewModel {
         activeRaagFilters.removeAll()
         showFavoritesOnly = false
         searchText = ""
+        activeSourceFilter = nil
         applyFilters()
     }
 
@@ -235,6 +251,61 @@ final class SongLibraryViewModel {
                 "is_favorite": song.isFavorite,
             ]
         )
+    }
+
+    /// Toggles the source filter between showing all songs and user-only songs.
+    func toggleSourceFilter() {
+        if activeSourceFilter == "user" {
+            activeSourceFilter = nil
+        } else {
+            activeSourceFilter = "user"
+        }
+        applyFilters()
+    }
+
+    /// Deletes a user-imported song from SwiftData and refreshes the library.
+    ///
+    /// Only call this for songs where `source == "user"`. Admin content must not be deleted.
+    ///
+    /// - Parameter song: The song to permanently delete.
+    func deleteSong(_ song: Song) {
+        modelContext.delete(song)
+        // Immediately remove from in-memory arrays so the UI updates without waiting for a reload
+        allSongs.removeAll { $0.id == song.id }
+        applyFilters()
+        AnalyticsManager.shared.track(.songDeleted, properties: [
+            "title": song.title,
+            "source": song.source,
+        ])
+    }
+
+    /// Applies an edited DTO's fields onto an existing Song in place, then refreshes filters.
+    ///
+    /// Called by `SongEditView` after the pipeline re-runs with updated notation.
+    /// All SwiftData mutations are picked up automatically by CloudKit sync.
+    ///
+    /// - Parameters:
+    ///   - song: The existing `Song` to update.
+    ///   - dto: The fully validated `ImportedSongDTO` produced by the re-import pipeline.
+    func updateSongFromDTO(_ song: Song, dto: ImportedSongDTO) {
+        song.title = dto.title
+        song.artist = dto.artist
+        song.language = dto.language
+        song.difficulty = max(1, min(5, dto.difficulty))
+        song.category = dto.category
+        song.tempo = dto.tempo
+        song.durationSeconds = dto.durationSeconds
+        song.sargamNotation = dto.sargamNotationData
+        song.westernNotation = dto.westernNotationData
+        song.midiData = dto.midiData
+        song.keySignatureRaw = dto.keySignature
+        song.timeSignatureRaw = dto.timeSignature
+        song.updatedAt = Date()
+        applyFilters()
+        AnalyticsManager.shared.track(.songEdited, properties: [
+            "title": song.title,
+            "source": song.source,
+        ])
     }
 
     /// Whether a song is premium-locked (not free and user is not authenticated).
