@@ -125,7 +125,7 @@ struct PlayAlongFullFlowTests {
         await vm.startSession()
 
         // Advance clock to simulate some playback time
-        clock.advance(by: .milliseconds(200))
+        await clock.advance(by: .milliseconds(200))
         try? await Task.sleep(for: .milliseconds(50))
 
         let eventsBeforePause = vm.noteEvents.count
@@ -151,10 +151,11 @@ struct PlayAlongFullFlowTests {
         await vm.loadSong(song)
         await vm.startSession()
 
-        // At 120 BPM, each beat = 0.5s, 4 notes = 2.0s total duration
-        // Advance past all notes plus their duration to trigger completion
-        clock.advance(by: .seconds(3))
-        try? await Task.sleep(for: .milliseconds(200))
+        // At 120 BPM, each beat = 0.5s, 4 notes = 2.0s total duration.
+        // Use advanceToCompletion (50ms steps) so the playback loop can wake
+        // up after each sleep, process any due notes, and register the next
+        // sleep — ensuring all notes are processed and completeSession() fires.
+        await clock.advanceToCompletion(totalDuration: .seconds(3), step: .milliseconds(50))
 
         // Session should have completed — all notes missed (no input)
         #expect(vm.playbackState == .stopped)
@@ -179,7 +180,7 @@ struct PlayAlongFullFlowTests {
         #expect(vm.noteEvents[3].swarName == "Pa")
 
         // Advance to first note and verify noteState is active
-        clock.advance(by: .milliseconds(100))
+        await clock.advance(by: .milliseconds(100))
         try? await Task.sleep(for: .milliseconds(50))
 
         // At least the first note should have become active
@@ -231,7 +232,7 @@ struct PlayAlongFullFlowTests {
         await vm.loadSong(song)
         await vm.startSession()
 
-        clock.advance(by: .milliseconds(100))
+        await clock.advance(by: .milliseconds(100))
         try? await Task.sleep(for: .milliseconds(50))
 
         vm.cleanup()
@@ -252,7 +253,7 @@ struct PlayAlongFullFlowTests {
         await vm.startSession()
 
         // Advance to first note (Sa, MIDI 60)
-        clock.advance(by: .milliseconds(100))
+        await clock.advance(by: .milliseconds(100))
         try? await Task.sleep(for: .milliseconds(50))
 
         guard vm.currentNoteIndex != nil else {
@@ -280,7 +281,7 @@ struct PlayAlongFullFlowTests {
         await vm.startSession()
 
         // Advance so first note becomes active
-        clock.advance(by: .milliseconds(100))
+        await clock.advance(by: .milliseconds(100))
         try? await Task.sleep(for: .milliseconds(100))
 
         guard vm.currentNoteIndex != nil else { return }
@@ -304,7 +305,7 @@ struct PlayAlongFullFlowTests {
         await vm.startSession()
 
         // Advance so first note becomes active
-        clock.advance(by: .milliseconds(100))
+        await clock.advance(by: .milliseconds(100))
         try? await Task.sleep(for: .milliseconds(100))
 
         guard vm.currentNoteIndex != nil else { return }
@@ -360,7 +361,7 @@ struct PlayAlongTempoScalingTests {
         // At 0.5x tempo, note at timestamp 0.5s is scheduled at 0.5/0.5 = 1.0s
         // Advance 0.8s — first note (at 0.0s) should have been played but
         // second note (at 1.0s effective) should not yet
-        clock.advance(by: .milliseconds(800))
+        await clock.advance(by: .milliseconds(800))
         try? await Task.sleep(for: .milliseconds(100))
 
         // First note should have been played (SoundFont called)
@@ -385,7 +386,7 @@ struct PlayAlongTempoScalingTests {
 
         // At 1.5x, note at timestamp 0.5s is scheduled at 0.5/1.5 ~= 0.333s
         // Advance 0.4s — first two notes should have been played
-        clock.advance(by: .milliseconds(400))
+        await clock.advance(by: .milliseconds(400))
         try? await Task.sleep(for: .milliseconds(100))
 
         // With faster tempo, more notes should have been reached
@@ -405,7 +406,7 @@ struct PlayAlongTempoScalingTests {
         await vm.startSession()
 
         // Let first note play
-        clock.advance(by: .milliseconds(100))
+        await clock.advance(by: .milliseconds(100))
         try? await Task.sleep(for: .milliseconds(50))
 
         // Change tempo to 0.5x — subsequent notes should be scheduled slower
@@ -465,10 +466,10 @@ struct PlayAlongScoringIntegrationTests {
         for (index, midi) in expectedMIDI.enumerated() {
             if index == 0 {
                 // Advance just past the first note's timestamp (0.0s)
-                clock.advance(by: .milliseconds(10))
+                await clock.advance(by: .milliseconds(10))
             } else {
                 // Advance to just past the next note's timestamp
-                clock.advance(by: .milliseconds(500))
+                await clock.advance(by: .milliseconds(500))
             }
             // Yield to the playback loop so it can process the note
             try? await Task.sleep(for: .milliseconds(100))
@@ -479,9 +480,9 @@ struct PlayAlongScoringIntegrationTests {
             }
         }
 
-        // Advance well past the end to trigger session completion
-        clock.advance(by: .seconds(5))
-        try? await Task.sleep(for: .milliseconds(200))
+        // Advance well past the end to trigger session completion.
+        // Use step-by-step advancement so the playback loop processes remaining notes.
+        await clock.advanceToCompletion(totalDuration: .seconds(5), step: .milliseconds(50))
 
         // All notes played correctly: expect high accuracy and 5 stars
         if vm.playbackState == .stopped {
@@ -503,9 +504,9 @@ struct PlayAlongScoringIntegrationTests {
         await vm.loadSong(song)
         await vm.startSession()
 
-        // Do not play any notes — let all notes pass as missed
-        clock.advance(by: .seconds(4))
-        try? await Task.sleep(for: .milliseconds(200))
+        // Do not play any notes — let all notes pass as missed.
+        // Use step-by-step advancement to give the playback loop scheduling opportunities.
+        await clock.advanceToCompletion(totalDuration: .seconds(4), step: .milliseconds(50))
 
         if vm.playbackState == .stopped {
             #expect(vm.starRating == 1)
@@ -526,15 +527,14 @@ struct PlayAlongScoringIntegrationTests {
         await vm.startSession()
 
         // Play only the first note correctly, let the rest be missed
-        clock.advance(by: .milliseconds(50))
+        await clock.advance(by: .milliseconds(50))
         try? await Task.sleep(for: .milliseconds(80))
         if vm.currentNoteIndex != nil {
             vm.handleKeyboardTouch(midiNote: 60) // Sa correct
         }
 
-        // Let remaining notes be missed
-        clock.advance(by: .seconds(4))
-        try? await Task.sleep(for: .milliseconds(200))
+        // Let remaining notes be missed via step-by-step advancement
+        await clock.advanceToCompletion(totalDuration: .seconds(4), step: .milliseconds(50))
 
         if vm.playbackState == .stopped {
             // 1 correct + 3 missed => ~25% accuracy => 1 star
@@ -553,7 +553,7 @@ struct PlayAlongScoringIntegrationTests {
         await vm.startSession()
 
         // Play first note correctly
-        clock.advance(by: .milliseconds(50))
+        await clock.advance(by: .milliseconds(50))
         try? await Task.sleep(for: .milliseconds(80))
         if vm.currentNoteIndex != nil {
             vm.handleKeyboardTouch(midiNote: 60) // Sa correct
@@ -561,7 +561,7 @@ struct PlayAlongScoringIntegrationTests {
         }
 
         // Play second note correctly
-        clock.advance(by: .milliseconds(500))
+        await clock.advance(by: .milliseconds(500))
         try? await Task.sleep(for: .milliseconds(80))
         if vm.currentNoteIndex != nil {
             vm.handleKeyboardTouch(midiNote: 62) // Re correct
@@ -579,8 +579,7 @@ struct PlayAlongScoringIntegrationTests {
         let easyDifficultySong = makeNotationSong(difficulty: 1, tempo: 120)
         await vm1.loadSong(easyDifficultySong)
         await vm1.startSession()
-        clock1.advance(by: .seconds(4))
-        try? await Task.sleep(for: .milliseconds(200))
+        await clock1.advanceToCompletion(totalDuration: .seconds(4), step: .milliseconds(50))
         let easyXP = vm1.xpEarned
 
         let sut2 = makeSUT()
@@ -589,8 +588,7 @@ struct PlayAlongScoringIntegrationTests {
         let hardDifficultySong = makeNotationSong(difficulty: 5, tempo: 120)
         await vm2.loadSong(hardDifficultySong)
         await vm2.startSession()
-        clock2.advance(by: .seconds(4))
-        try? await Task.sleep(for: .milliseconds(200))
+        await clock2.advanceToCompletion(totalDuration: .seconds(4), step: .milliseconds(50))
         let hardXP = vm2.xpEarned
 
         // Higher difficulty should yield more XP due to difficulty multiplier

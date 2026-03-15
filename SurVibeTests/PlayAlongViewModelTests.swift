@@ -340,7 +340,7 @@ struct PlayAlongViewModelTests {
         await vm.startSession()
 
         // Advance clock so the first note becomes active
-        clock.advance(by: .milliseconds(100))
+        await clock.advance(by: .milliseconds(100))
         // Allow the playback loop to process
         try? await Task.sleep(for: .milliseconds(50))
 
@@ -447,7 +447,7 @@ struct PlayAlongViewModelTests {
         await vm.startSession()
 
         // Advance past first note to the second (Komal Re)
-        clock.advance(by: .milliseconds(600))
+        await clock.advance(by: .milliseconds(600))
         try? await Task.sleep(for: .milliseconds(100))
 
         // Verify we have note events with Komal Re
