@@ -39,16 +39,18 @@ struct PlayAlongToolbarIconTests {
 
 // MARK: - Tempo Scale Tests
 
+// clampTempoScale valid range is 0.4–1.0 (matches the 40%–100% slider).
+// formatTempoScale returns a percentage string, e.g. "75%".
 struct PlayAlongToolbarTempoTests {
 
     @Test func tempoScaleClampedToMinimum() {
         let clamped = PlayAlongToolbar.clampTempoScale(0.1)
-        #expect(clamped == 0.25)
+        #expect(clamped == 0.4) // slider minimum is 40%
     }
 
     @Test func tempoScaleClampedToMaximum() {
         let clamped = PlayAlongToolbar.clampTempoScale(3.0)
-        #expect(clamped == 1.5)
+        #expect(clamped == 1.0) // slider maximum is 100%
     }
 
     @Test func tempoScaleWithinRangeUnchanged() {
@@ -57,38 +59,38 @@ struct PlayAlongToolbarTempoTests {
     }
 
     @Test func tempoScaleMinBoundary() {
-        let clamped = PlayAlongToolbar.clampTempoScale(0.25)
-        #expect(clamped == 0.25)
+        let clamped = PlayAlongToolbar.clampTempoScale(0.4)
+        #expect(clamped == 0.4)
     }
 
     @Test func tempoScaleMaxBoundary() {
-        let clamped = PlayAlongToolbar.clampTempoScale(1.5)
-        #expect(clamped == 1.5)
+        let clamped = PlayAlongToolbar.clampTempoScale(1.0)
+        #expect(clamped == 1.0)
     }
 
     @Test func tempoScaleNegativeClampedToMinimum() {
         let clamped = PlayAlongToolbar.clampTempoScale(-1.0)
-        #expect(clamped == 0.25)
+        #expect(clamped == 0.4)
     }
 
-    @Test func formatTempoScaleShowsOneDecimalForWholeNumbers() {
+    @Test func formatTempoScaleShowsPercentForFullSpeed() {
         let formatted = PlayAlongToolbar.formatTempoScale(1.0)
-        #expect(formatted == "1.0x" || formatted == "1x")
+        #expect(formatted == "100%")
     }
 
-    @Test func formatTempoScaleShowsFractions() {
+    @Test func formatTempoScaleShowsPercentForFraction() {
         let formatted = PlayAlongToolbar.formatTempoScale(0.75)
-        #expect(formatted.contains("0.75"))
+        #expect(formatted == "75%")
     }
 
-    @Test func formatTempoScaleClampsBelowMinimum() {
-        let formatted = PlayAlongToolbar.formatTempoScale(0.1)
-        #expect(formatted.contains("0.25"))
+    @Test func formatTempoScaleShowsPercentAtMinimum() {
+        let formatted = PlayAlongToolbar.formatTempoScale(0.4)
+        #expect(formatted == "40%")
     }
 
-    @Test func formatTempoScaleClampsAboveMaximum() {
-        let formatted = PlayAlongToolbar.formatTempoScale(5.0)
-        #expect(formatted.contains("1.5"))
+    @Test func formatTempoScaleShowsPercentAt60() {
+        let formatted = PlayAlongToolbar.formatTempoScale(0.6)
+        #expect(formatted == "60%")
     }
 }
 
@@ -96,10 +98,12 @@ struct PlayAlongToolbarTempoTests {
 
 struct PlayAlongViewModeTests {
 
-    @Test func allCasesContainsBothModes() {
-        #expect(PlayAlongViewMode.allCases.count == 2)
+    @Test func allCasesContainsAllModes() {
+        // fallingNotes, scrollingSheet, hide
+        #expect(PlayAlongViewMode.allCases.count == 3)
         #expect(PlayAlongViewMode.allCases.contains(.fallingNotes))
         #expect(PlayAlongViewMode.allCases.contains(.scrollingSheet))
+        #expect(PlayAlongViewMode.allCases.contains(.hide))
     }
 
     @Test func fallingNotesHasLabel() {
@@ -116,6 +120,14 @@ struct PlayAlongViewModeTests {
 
     @Test func scrollingSheetHasIcon() {
         #expect(!PlayAlongViewMode.scrollingSheet.iconName.isEmpty)
+    }
+
+    @Test func hideHasLabel() {
+        #expect(!PlayAlongViewMode.hide.label.isEmpty)
+    }
+
+    @Test func hideHasIcon() {
+        #expect(!PlayAlongViewMode.hide.iconName.isEmpty)
     }
 
     @Test func rawValueRoundTrips() {

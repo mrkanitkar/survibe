@@ -3,7 +3,10 @@ import SVCore
 import SVAudio
 
 /// Integration tests verifying Sprint 0 demo scenarios.
-@Suite("Sprint 0 Integration Tests")
+///
+/// Uses `.serialized` to prevent parallel tests from polluting shared
+/// singleton state (AnalyticsManager, SoundFontManager, etc.).
+@Suite("Sprint 0 Integration Tests", .serialized)
 struct IntegrationTests {
 
     // MARK: - D2: SoundFont play (stub verification)
@@ -46,9 +49,9 @@ struct IntegrationTests {
     @Test("AudioEngineManager has correct node graph")
     @MainActor func testNodeGraph() {
         let manager = AudioEngineManager.shared
-        // Verify node graph is properly configured
+        // Verify structural properties only — do NOT assert isRunning because
+        // other tests or the host app may have started the engine.
         #expect(manager.bufferSize == 2048)
-        #expect(manager.isRunning == false)
         // Access nodes to verify they exist (all non-optional)
         _ = manager.engine
         _ = manager.sampler

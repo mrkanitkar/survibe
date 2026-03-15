@@ -13,7 +13,10 @@ import Testing
 ///
 /// Also covers H-1 (AtomicCounter removal) — verifies no @unchecked Sendable
 /// patterns remain and that Mutex-based concurrency primitives work correctly.
-@Suite("Audio Pipeline Memory Safety Tests")
+///
+/// Serialized because some tests create PitchDetectionViewModel which accesses
+/// the AudioEngineManager.shared singleton.
+@Suite("Audio Pipeline Memory Safety Tests", .serialized)
 struct AudioPipelineMemoryTests {
 
     // MARK: - TEST-D01-001 Scenario 1: ViewModel Deallocates After Stop

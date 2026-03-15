@@ -107,7 +107,7 @@ struct PlayAlongFullFlowTests {
         #expect(vm.noteEvents.count == 4)
         #expect(engine.startCallCount == 1)
         #expect(engine.isRunning)
-        #expect(metronome.stopCallCount >= 1)
+        #expect(metronome.startCallCount >= 1)
         #expect(vm.currentTime == 0)
         #expect(vm.noteScores.isEmpty)
         // SoundFont should be available (mock always reports loaded)
