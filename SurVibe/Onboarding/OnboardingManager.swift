@@ -75,8 +75,16 @@ final class OnboardingManager {
     // MARK: - Initialization
 
     /// Creates an OnboardingManager and restores any previously saved preferences.
+    ///
+    /// When the `UITEST_SKIP_ONBOARDING` launch environment key is set to `"1"`,
+    /// onboarding is treated as already complete so UI tests can reach the tab bar
+    /// without interacting with the onboarding flow.
     init() {
         restoreFromStorage()
+        if ProcessInfo.processInfo.environment["UITEST_SKIP_ONBOARDING"] == "1" {
+            isOnboardingComplete = true
+            Self.logger.info("UI test mode: onboarding skipped via launch environment")
+        }
     }
 
     // MARK: - Navigation Methods

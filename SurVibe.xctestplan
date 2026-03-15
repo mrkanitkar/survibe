@@ -70,6 +70,13 @@
         "identifier" : "SVAdvancedTests",
         "name" : "SVAdvancedTests"
       }
+    },
+    {
+      "target" : {
+        "containerPath" : "container:SurVibe.xcodeproj",
+        "identifier" : "A961E72C2F5F808100B3333D",
+        "name" : "SurVibeUITests"
+      }
     }
   ],
   "version" : 1
