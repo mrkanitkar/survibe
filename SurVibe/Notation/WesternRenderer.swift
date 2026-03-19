@@ -16,6 +16,12 @@ struct WesternRenderer: View {
     /// Zoom multiplier applied to all note widths.
     let zoomScale: CGFloat
 
+    /// MIDI note number currently pressed on the keyboard, if any.
+    ///
+    /// When set, the matching note block is highlighted with a green border
+    /// so the user can see which notation block corresponds to the key they pressed.
+    var detectedMidiNote: Int? = nil
+
     @Environment(\.accessibilityReduceMotion)
     private var reduceMotion
 
@@ -66,6 +72,7 @@ struct WesternRenderer: View {
                             zoomScale: zoomScale,
                             isCurrentNote: index == currentNoteIndex,
                             isPastNote: isPastNote(at: index),
+                            isDetected: notes[index].midiNumber == detectedMidiNote,
                             reduceMotion: reduceMotion
                         )
                         .id(index)

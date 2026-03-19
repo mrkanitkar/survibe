@@ -20,6 +20,9 @@ struct WesternNoteView: View {
     /// Whether this note has already been played.
     let isPastNote: Bool
 
+    /// Whether the user is currently pressing this note on the keyboard.
+    var isDetected: Bool = false
+
     /// Whether to suppress animations for accessibility.
     let reduceMotion: Bool
 
@@ -54,7 +57,7 @@ struct WesternNoteView: View {
     /// The main monochrome note block with name overlay and border.
     private var noteBlock: some View {
         RoundedRectangle(cornerRadius: 8)
-            .fill(Color(uiColor: .systemGray5))
+            .fill(isDetected ? Color.green.opacity(0.25) : Color(uiColor: .systemGray5))
             .frame(width: noteWidth, height: 48)
             .overlay(
                 Text(verbatim: displayName)
@@ -66,8 +69,8 @@ struct WesternNoteView: View {
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
                     .stroke(
-                        Color.primary.opacity(isCurrentNote ? 1 : 0.15),
-                        lineWidth: isCurrentNote ? 2 : 0.5
+                        isDetected ? Color.green : Color.primary.opacity(isCurrentNote ? 1 : 0.15),
+                        lineWidth: isDetected ? 2 : (isCurrentNote ? 2 : 0.5)
                     )
             )
             .if(isCurrentNote) { view in
@@ -95,6 +98,9 @@ struct WesternNoteView: View {
 
         if isCurrentNote {
             parts.append("currently playing")
+        }
+        if isDetected {
+            parts.append("key pressed")
         }
 
         return parts.joined(separator: ", ")

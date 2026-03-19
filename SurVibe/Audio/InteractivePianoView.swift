@@ -23,6 +23,14 @@ struct InteractivePianoView: View {
     /// MIDI notes currently highlighted by pitch detection (external source).
     let activeMidiNotes: Set<Int>
 
+    /// Isolated observable for MIDI keyboard highlight state.
+    ///
+    /// When provided (play-along mode), this view observes `HighlightState` directly
+    /// so that CADisplayLink-driven key highlights (60–120 Hz) only re-render
+    /// `InteractivePianoView` — NOT the parent `SongPlayAlongView` hierarchy.
+    /// When `nil` (practice mode), falls back to `activeMidiNotes` alone.
+    var highlightState: HighlightState? = nil
+
     /// Cents offset for tuning accuracy color on detected notes.
     let activeCentsOffset: Double
 
@@ -202,9 +210,14 @@ struct InteractivePianoView: View {
 
     /// Determine the highlight color for a key based on detection and touch state.
     ///
+    /// When `highlightState` is set, MIDI keyboard highlights are read from there
+    /// (isolated observation — does not cause the parent view to re-render).
+    /// `activeMidiNotes` covers mic and touch-highlight fallbacks.
+    ///
     /// - Returns: Blue for detection-only, green for touch-only, cyan for both, nil for none.
     private func highlightColor(for midiNote: Int) -> Color? {
-        let isDetected = activeMidiNotes.contains(midiNote)
+        let isMIDIHighlighted = highlightState?.midiHighlightNotes.contains(midiNote) ?? false
+        let isDetected = isMIDIHighlighted || activeMidiNotes.contains(midiNote)
         let isTouched = touchedMidiNotes.contains(midiNote)
         let isExpected = expectedMidiNote == midiNote
 

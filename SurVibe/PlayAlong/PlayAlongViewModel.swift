@@ -126,37 +126,46 @@ final class PlayAlongViewModel {
     /// The UI reads this to highlight all simultaneously-pressed keys.
     private(set) var detectedMidiNotes: Set<Int> = []
 
+    /// Isolated observable carrying only MIDI key-highlight state.
+    ///
+    /// Separated from this ViewModel so that CADisplayLink ticks (60–120 Hz) that
+    /// update `highlightState.midiHighlightNotes` only re-render `InteractivePianoView`
+    /// — NOT the entire `SongPlayAlongView` hierarchy. `SongPlayAlongView.body`
+    /// must NEVER read this property; pass it directly to `InteractivePianoView`.
+    let highlightState = HighlightState()
+
     /// The effective set of MIDI notes to highlight on the keyboard.
     ///
-    /// Returns detected notes when any are active; falls back to the current
-    /// playback-position note when idle or paused. Consumed directly by the
-    /// keyboard view — eliminates the `@State` relay in `SongPlayAlongView`.
+    /// Used only by `SongPlayAlongView` for the fallback (mic / on-screen touch /
+    /// expected-note highlight). The MIDI keyboard highlight path now goes through
+    /// `highlightState.midiHighlightNotes` so it does NOT cause `SongPlayAlongView`
+    /// to re-render.
     var effectiveMidiNotes: Set<Int> {
+        // Microphone or on-screen touch path
         if !detectedMidiNotes.isEmpty {
             return detectedMidiNotes
         }
+        // Fallback: highlight the current expected note during playback
         if let index = currentNoteIndex, index < noteEvents.count {
             return [Int(noteEvents[index].midiNote)]
         }
         return []
     }
 
-    /// The swar name and octave of the first pressed MIDI/touch note, if any.
+    /// Recomputes `highlightState.detectedSwarInfo` from a set of MIDI notes.
     ///
-    /// Derived from `detectedMidiNotes`. Returns the base swar name as stored
-    /// in `SargamNote.note` (e.g. "Re" for Komal Re, "Sa" for Sa), which is
-    /// what `SargamRenderer.isNoteDetected` compares against. Used by
-    /// `ScrollingSheetView` to highlight the matching sargam block when the
-    /// user presses an on-screen key or a hardware MIDI keyboard key.
-    var detectedSwarInfo: (name: String, octave: Int)? {
-        guard let midiNote = detectedMidiNotes.min() else { return nil }
-        // swarNameFromMIDI returns full rawValue e.g. "Komal Re", "Tivra Ma", "Sa".
-        // SargamNote.note stores only the base name e.g. "Re", "Ma", "Sa".
-        // Extract the last word so the comparison in isNoteDetected matches.
+    /// Called at every `detectedMidiNotes` mutation site so `ScrollingSheetView`
+    /// observes `HighlightState` directly instead of reading from this ViewModel,
+    /// keeping `SongPlayAlongView.body` out of the note-on/off render path.
+    private func updateDetectedSwarInfo(from midiNotes: Set<Int>) {
+        guard let midiNote = midiNotes.min() else {
+            highlightState.detectedSwarInfo = nil
+            return
+        }
         let fullName = swarNameFromMIDI(UInt8(midiNote))
         let baseName = fullName.components(separatedBy: " ").last ?? fullName
         let octave = (midiNote / 12) - 1
-        return (name: baseName, octave: octave)
+        highlightState.detectedSwarInfo = (name: baseName, octave: octave)
     }
 
     /// Whether a USB/Bluetooth MIDI keyboard is currently connected.
@@ -240,6 +249,11 @@ final class PlayAlongViewModel {
     /// ContinuousClock instant when playback started (or resumed).
     private var playbackStartTime: ContinuousClock.Instant?
 
+    /// Wall-clock Date adjusted to represent "when time=0 was", used by
+    /// `FallingNotesView` to self-drive animation via `TimelineView` date.
+    /// Set on play/resume, cleared on pause/stop. Accounts for pause offset.
+    private(set) var playbackStartDate: Date?
+
     /// Elapsed time accumulated before the most recent pause.
     private var pauseElapsed: TimeInterval = 0
 
@@ -264,6 +278,21 @@ final class PlayAlongViewModel {
 
     /// Raga-aware note mapper for enriching pitch results. nil for non-raga songs.
     private var ragaMapper: RagaAwareMapper?
+
+    /// CADisplayLink-driven highlight coordinator for MIDI keyboard input.
+    ///
+    /// Written lock-free on CoreMIDI's high-priority thread; read by SwiftUI
+    /// via `effectiveMidiNotes` at display-link cadence. This decouples key
+    /// highlighting from the main-actor scheduling delay, eliminating missed
+    /// highlights at 120–140 BPM.
+    private let highlightCoordinator = MIDINoteHighlightCoordinator()
+
+    /// Off-main-actor scoring engine.
+    ///
+    /// Runs note matching arithmetic away from `@MainActor` so MIDI scoring never
+    /// competes with SwiftUI's render pass. Only the resulting `ScoringDiff` hops
+    /// back to update `@Observable` state.
+    private let noteMatchingActor = NoteMatchingActor()
 
     private static let logger = Logger(
         subsystem: "com.survibe",
@@ -438,6 +467,8 @@ final class PlayAlongViewModel {
         }
 
         playbackStartTime = clock.now
+        // Date reference for FallingNotesView self-timing (no pauseElapsed offset on fresh start)
+        playbackStartDate = Date()
         playbackState = .playing
 
         // Start 30 Hz display link for position updates
@@ -478,6 +509,7 @@ final class PlayAlongViewModel {
         }
 
         playbackState = .paused
+        playbackStartDate = nil  // freeze FallingNotesView animation
 
         cancelPlaybackTasks()
         soundFont.stopAllNotes()
@@ -513,6 +545,9 @@ final class PlayAlongViewModel {
         playbackStartTime = clock.now.advanced(
             by: .seconds(-pauseElapsed)
         )
+        // Date reference for FallingNotesView: wind back by pauseElapsed so
+        // the view's computed currentTime continues from where it paused.
+        playbackStartDate = Date(timeIntervalSinceNow: -pauseElapsed)
         playbackState = .playing
 
         startDisplayLink()
@@ -548,6 +583,7 @@ final class PlayAlongViewModel {
     /// - Parameter midiNote: MIDI note number of the pressed key.
     func handleKeyboardNoteOn(midiNote: Int) {
         detectedMidiNotes.insert(midiNote)
+        updateDetectedSwarInfo(from: detectedMidiNotes)
         if playbackState == .playing {
             processNoteInput(midiNote: midiNote)
         } else if playbackState == .idle || playbackState == .paused {
@@ -563,6 +599,7 @@ final class PlayAlongViewModel {
     /// - Parameter midiNote: MIDI note number of the released key.
     func handleKeyboardNoteOff(midiNote: Int) {
         detectedMidiNotes.remove(midiNote)
+        updateDetectedSwarInfo(from: detectedMidiNotes)
     }
 
     /// Handle an on-screen keyboard touch (legacy entry point used by tests).
@@ -628,6 +665,9 @@ final class PlayAlongViewModel {
         pitchDetectionTask = nil
         midiInput.onNoteEvent = nil
         midiInput.stop()
+        highlightCoordinator.onActiveNotesChanged = nil
+        highlightCoordinator.stop()
+        highlightState.midiHighlightNotes = []
         midiConnectionTask?.cancel()
         midiConnectionTask = nil
         isMIDIConnected = false
@@ -635,6 +675,9 @@ final class PlayAlongViewModel {
         patienceTimerTask?.cancel()
         patienceTimerTask = nil
         playbackState = .idle
+        // Flush diagnostic log to file so it's available when the user
+        // closes the song and reconnects to Mac via USB.
+        MIDIEventDiagnostics.shared.printSummary()
         Self.logger.info("Play-along cleanup complete")
     }
 
@@ -678,6 +721,14 @@ final class PlayAlongViewModel {
         midiInput.onNoteEvent = nil  // clear any previous callback before re-registering
         midiConnectionTask?.cancel()
         midiConnectionTask = nil
+        highlightCoordinator.start()
+        // Relay coordinator highlight changes into the isolated HighlightState
+        // observable. Only InteractivePianoView observes HighlightState, so this
+        // write never triggers SongPlayAlongView.body to re-evaluate.
+        let hs = highlightState
+        highlightCoordinator.onActiveNotesChanged = { notes in
+            hs.midiHighlightNotes = notes
+        }
         midiInput.start()
 
         // Sync connection state after start
@@ -690,37 +741,61 @@ final class PlayAlongViewModel {
             )
         }
 
-        // Use the direct onNoteEvent callback instead of `for await noteOnStream`.
+        // MIDI callback: two-phase approach for sub-frame key highlighting.
         //
-        // The callback fires synchronously on CoreMIDI's high-priority thread
-        // before the event is buffered into AsyncStream. We immediately dispatch
-        // a .userInteractive Task to @MainActor, which maps to
-        // dispatch_async(main_queue) — typically 0.1–2 ms on an idle main thread.
+        // Phase 1 (CoreMIDI thread, synchronous, ~0 ms):
+        //   Call highlightCoordinator.noteOn/noteOff directly. These methods are
+        //   `nonisolated` and write to a lock-free Bool array — no actor hop,
+        //   no queuing. The CADisplayLink reads the array every ~8–16 ms and
+        //   publishes `activeNotes` to SwiftUI only when changed.
         //
-        // Previous path: CoreMIDI → AsyncStream buffer → cooperative scheduler
-        //                resume (5–20 ms jitter) → @MainActor
-        // New path:      CoreMIDI → direct closure → Task { @MainActor } (~1–3 ms)
+        // Phase 2 (MainActor, async, ~1–3 ms):
+        //   Dispatch scoring and detectedMidiNotes bookkeeping to @MainActor.
+        //   This path is non-time-critical for visual feedback because Phase 1
+        //   already guarantees the key highlights before the next rendered frame.
+        //
+        // At 140 BPM with 16th notes (107 ms/note), Phase 1 ensures the key
+        // highlights within the next CADisplayLink tick (~8 ms at 120 Hz) regardless
+        // of main actor load. This matches Simply Piano's architecture.
+#if DEBUG
+        MIDIEventDiagnostics.shared.reset()
+        MIDIEventDiagnostics.shared.isEnabled = true
+#endif
+
+        let coordinator = highlightCoordinator
         midiInput.onNoteEvent = { [weak self] event in
+            let midiNote = Int(event.noteNumber)
+
+            // Phase 1: CoreMIDI thread — lock-free highlight + diagnostic recording.
+            // Zero actor hops. Runs before any Task is enqueued.
+#if DEBUG
+            MIDIEventDiagnostics.shared.recordCoremidi(event: event)
+#endif
+            if event.isNoteOn {
+                coordinator.noteOn(midiNote)
+            } else {
+                coordinator.noteOff(midiNote)
+            }
+
+            // Phase 2: MainActor — scoring only. detectedMidiNotes is NOT mutated
+            // here because it triggers a full SongPlayAlongView re-render. Key
+            // highlighting is already handled by the coordinator in Phase 1 at
+            // display-link cadence via midiHighlightNotes.
             Task(priority: .high) { @MainActor [weak self] in
                 guard let self else { return }
-                let midiNote = Int(event.noteNumber)
+
+#if DEBUG
+                MIDIEventDiagnostics.shared.recordMainActor(event: event)
+#endif
 
                 if event.isNoteOn {
-                    self.detectedMidiNotes.insert(midiNote)
-
-                    Self.logger.debug(
-                        "MIDI note-on: \(event.noteNumber) vel=\(event.velocity)"
-                    )
-
                     if self.playbackState == .playing {
                         self.handleNoteDetected(midiNote: midiNote)
                     } else if self.playbackState == .idle || self.playbackState == .paused {
                         self.handleGuidedNoteDetected(midiNote: midiNote)
                     }
-                } else {
-                    // Note-off: remove from held-keys set so the key un-highlights.
-                    self.detectedMidiNotes.remove(midiNote)
                 }
+                // Note-off: no @Observable write needed — coordinator manages visual hold.
             }
         }
 
@@ -799,6 +874,7 @@ final class PlayAlongViewModel {
                     // MIDI keyboard takes priority for note highlighting.
                     if !self.isMIDIConnected {
                         self.detectedMidiNotes = [midiNote]
+                        self.updateDetectedSwarInfo(from: self.detectedMidiNotes)
                     }
 
                     if self.playbackState == .playing {
@@ -812,6 +888,7 @@ final class PlayAlongViewModel {
                     self.currentPitch = nil
                     if !self.isMIDIConnected {
                         self.detectedMidiNotes = []
+                        self.highlightState.detectedSwarInfo = nil
                     }
                     // Silence clears the last-scored note so the next onset is fresh
                     self.lastGuidedMidiNote = nil
@@ -842,6 +919,7 @@ final class PlayAlongViewModel {
                 if !self.isMIDIConnected, result.detectedPitches.count > 1 {
                     let midiNotes = Set(result.detectedPitches.map { $0.midiNote })
                     self.detectedMidiNotes = midiNotes
+                    self.updateDetectedSwarInfo(from: midiNotes)
                 }
             }
         }
@@ -1154,7 +1232,11 @@ final class PlayAlongViewModel {
                     let elapsed = self.clock.now - startTime
                     self.currentTime = self.elapsedSeconds(from: elapsed) * self.tempoScale
                 }
-                try? await Task.sleep(for: .milliseconds(33))
+                // 50 ms (20 Hz) instead of 33 ms (30 Hz).
+                // At 200 BPM with 16th notes each note arrives every ~150 ms,
+                // so 20 Hz position updates are still smooth while freeing the
+                // main actor ~17 ms per cycle for MIDI scoring tasks.
+                try? await Task.sleep(for: .milliseconds(50))
             }
         }
     }
@@ -1163,9 +1245,13 @@ final class PlayAlongViewModel {
 
     /// Process a note input (from either keyboard touch or pitch detection).
     ///
-    /// Compares the input MIDI note against the current expected note event.
-    /// Uses the full swar name (e.g., "Komal Re", "Tivra Ma") for scoring,
-    /// not the base note name.
+    /// Scoring arithmetic runs on `NoteMatchingActor` (off `@MainActor`) so it never
+    /// competes with SwiftUI's falling-notes render pass. Only the resulting
+    /// `ScoringDiff` hops back to update `@Observable` state on `@MainActor`.
+    ///
+    /// Wait-mode evaluation via `PlayAlongWaitController` still happens here on
+    /// `@MainActor` (the controller is `@MainActor`-isolated) — the boolean result
+    /// is then passed as a `Sendable` value to the actor.
     ///
     /// - Parameter midiNote: MIDI note number of the input.
     private func processNoteInput(midiNote: Int) {
@@ -1173,71 +1259,52 @@ final class PlayAlongViewModel {
               index < noteEvents.count else { return }
 
         let expectedEvent = noteEvents[index]
-        let isCorrectMIDI = Int(expectedEvent.midiNote) == midiNote
 
-        // Derive the detected swar name from the MIDI note
-        let detectedSwarName = swarNameFromMIDI(UInt8(clamping: midiNote))
-
-        // Use actual cents deviation from live pitch when available, otherwise fallback
-        let centsDeviation: Double
-        if let pitch = currentPitch {
-            centsDeviation = abs(pitch.ragaCentsOffset ?? pitch.centsOffset)
-        } else {
-            centsDeviation = isCorrectMIDI ? 0 : 50
-        }
-
-        // If wait mode is active, evaluate through the wait controller
+        // Evaluate wait-mode match here on @MainActor (PlayAlongWaitController is
+        // @MainActor-isolated). Pass the Bool result to the actor as a Sendable value.
+        let waitModeMatch: Bool?
         if isWaitModeEnabled, let waitCtrl = waitController {
-            let matched = waitCtrl.evaluateAttempt(
-                detectedNoteName: detectedSwarName
-            )
-            if matched {
-                noteStates[expectedEvent.id] = .correct
-                let score = NoteScoreCalculator.score(
-                    expectedNote: expectedEvent.swarName,
-                    detectedNote: detectedSwarName,
-                    pitchDeviationCents: centsDeviation,
-                    timingDeviationSeconds: 0,
-                    durationDeviation: 0,
-                    ragaPitchDeviationCents: currentPitch?.ragaCentsOffset.map { abs($0) },
-                    ragaContext: ragaScoringContext
-                )
-                noteScores.append(score)
-                updateStreakForHit(grade: score.grade)
-            } else {
-                noteStates[expectedEvent.id] = .wrong
-            }
+            let detectedSwarName = swarNameFromMIDI(UInt8(clamping: midiNote))
+            waitModeMatch = waitCtrl.evaluateAttempt(detectedNoteName: detectedSwarName)
         } else {
-            // Standard mode: score immediately
-            if isCorrectMIDI {
-                noteStates[expectedEvent.id] = .correct
-                let score = NoteScoreCalculator.score(
-                    expectedNote: expectedEvent.swarName,
-                    detectedNote: detectedSwarName,
-                    pitchDeviationCents: centsDeviation,
-                    timingDeviationSeconds: 0,
-                    durationDeviation: 0,
-                    ragaPitchDeviationCents: currentPitch?.ragaCentsOffset.map { abs($0) },
-                    ragaContext: ragaScoringContext
-                )
-                noteScores.append(score)
-                updateStreakForHit(grade: score.grade)
-            } else {
-                noteStates[expectedEvent.id] = .wrong
-                let score = NoteScoreCalculator.score(
-                    expectedNote: expectedEvent.swarName,
-                    detectedNote: detectedSwarName,
-                    pitchDeviationCents: 50,
-                    timingDeviationSeconds: 0,
-                    durationDeviation: 0
-                )
-                noteScores.append(score)
-                updateStreakForMiss()
-            }
+            waitModeMatch = nil
         }
 
-        // Update running accuracy
-        accuracy = PracticeScoring.averageAccuracy(scores: noteScores)
+        // Snapshot Sendable values before crossing actor boundary.
+        let pitch = currentPitch
+        let ragaContext = ragaScoringContext
+        let actor = noteMatchingActor
+
+        // Launch a detached task so the scoring hop to NoteMatchingActor does not
+        // extend @MainActor's busy interval while the actor evaluates.
+        Task { [weak self] in
+            let diff = await actor.evaluate(
+                midiNote: midiNote,
+                expectedEvent: expectedEvent,
+                currentPitch: pitch,
+                ragaScoringContext: ragaContext,
+                waitModeMatch: waitModeMatch
+            )
+
+            // Apply the diff back on @MainActor — only three writes, no re-render
+            // of the full note list.
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                self.noteStates[diff.noteEventID] = diff.newState
+                if let score = diff.score {
+                    self.noteScores.append(score)
+                }
+                switch diff.streakOutcome {
+                case .hit(let grade):
+                    self.updateStreakForHit(grade: grade)
+                case .miss:
+                    self.updateStreakForMiss()
+                case .noChange:
+                    break
+                }
+                self.accuracy = PracticeScoring.averageAccuracy(scores: self.noteScores)
+            }
+        }
     }
 
     /// Derive the full swar name from a MIDI note number.
@@ -1304,6 +1371,9 @@ final class PlayAlongViewModel {
         cancelPlaybackTasks()
         soundFont.stopAllNotes()
         playbackState = .stopped
+
+        // Print MIDI diagnostics summary to Console.app
+        MIDIEventDiagnostics.shared.printSummary()
 
         // Persist session results to SwiftData
         if let modelContext, let song {

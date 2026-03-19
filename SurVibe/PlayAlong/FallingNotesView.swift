@@ -26,8 +26,16 @@ struct FallingNotesView: View {
     /// All note events for the current song, sorted by timestamp.
     let noteEvents: [NoteEvent]
 
-    /// Current playback position in seconds.
-    let currentTime: TimeInterval
+    /// Wall-clock date representing time=0 of the song, set by the ViewModel
+    /// on play/resume. When `nil` (paused/stopped), the last-computed time is frozen.
+    /// `FallingNotesView` computes `currentTime` itself from this date inside
+    /// `TimelineView`, so the ViewModel never needs to write a 20 Hz tick to
+    /// drive the animation — eliminating the main actor pressure that caused
+    /// MIDI scoring lag.
+    let playbackStartDate: Date?
+
+    /// Tempo scale factor (1.0 = original speed). Applied to currentTime computation.
+    let tempoScale: Double
 
     /// Index of the note currently under the hit line, if any.
     let currentNoteIndex: Int?
@@ -70,11 +78,27 @@ struct FallingNotesView: View {
     var body: some View {
         GeometryReader { geometry in
             let viewportHeight = geometry.size.height
+            let paused = playbackStartDate == nil
 
-            TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: false)) { _ in
-                Canvas { context, size in
-                    drawHitLine(context: &context, size: size)
-                    drawNotes(context: &context, size: size, viewportHeight: viewportHeight)
+            TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: paused)) { context in
+                // Compute currentTime directly from the timeline date so the
+                // ViewModel never needs to write a periodic tick on @MainActor.
+                let currentTime: TimeInterval = {
+                    guard let startDate = playbackStartDate else {
+                        // Paused — compute frozen time from last known state
+                        if let index = currentNoteIndex, index < noteEvents.count {
+                            return noteEvents[index].timestamp
+                        }
+                        return 0
+                    }
+                    return context.date.timeIntervalSince(startDate) / tempoScale
+                }()
+
+                Canvas { ctx, size in
+                    drawHitLine(context: &ctx, size: size)
+                    drawNotes(context: &ctx, size: size,
+                              viewportHeight: viewportHeight,
+                              currentTime: currentTime)
                 }
                 .accessibilityLabel(Text("Falling notes display"))
                 .accessibilityHint(Text("Notes fall toward the piano keyboard. Play each note as it reaches the line."))
@@ -103,7 +127,8 @@ struct FallingNotesView: View {
     private func drawNotes(
         context: inout GraphicsContext,
         size: CGSize,
-        viewportHeight: CGFloat
+        viewportHeight: CGFloat,
+        currentTime: TimeInterval
     ) {
         let pps = FallingNotesLayoutEngine.pixelsPerSecond(
             viewportHeight: viewportHeight,
@@ -157,14 +182,17 @@ struct FallingNotesView: View {
                 cornerRadius: noteCornerRadius
             )
 
-            // Active note glow (unless reduce motion is on).
-            if state == .active && !reduceMotion {
-                var glowContext = context
-                glowContext.addFilter(.blur(radius: 6))
-                glowContext.fill(roundedPath, with: .color(color.opacity(0.5)))
-            }
-
             context.fill(roundedPath, with: .color(color))
+
+            // Active note highlight ring (replaces blur glow — blur requires a
+            // separate GPU render pass per note per frame, ~15ms at 200 BPM).
+            if state == .active && !reduceMotion {
+                context.stroke(
+                    roundedPath,
+                    with: .color(color.opacity(0.85)),
+                    lineWidth: 3
+                )
+            }
 
             // Note label.
             let label = FallingNotesLayoutEngine.noteLabel(
@@ -251,7 +279,8 @@ private enum FallingNotesPreviewData {
 
     FallingNotesView(
         noteEvents: events,
-        currentTime: 2.0,
+        playbackStartDate: Date(timeIntervalSinceNow: -2.0),
+        tempoScale: 1.0,
         currentNoteIndex: 4,
         noteStates: [events[4].id: .active, events[3].id: .correct, events[2].id: .correct],
         notationMode: .sargam,

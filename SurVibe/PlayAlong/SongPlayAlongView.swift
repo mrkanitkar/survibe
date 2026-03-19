@@ -111,10 +111,14 @@ struct SongPlayAlongView: View {
                     .padding(.bottom, 4)
             }
 
-            // Piano keyboard at the bottom — reads effectiveMidiNotes directly
-            // from the ViewModel (no @State relay) to minimise rendering hops.
+            // Piano keyboard at the bottom.
+            // highlightState is passed directly so CADisplayLink ticks (60–120 Hz)
+            // that update MIDI key highlights only re-render InteractivePianoView —
+            // NOT the entire SongPlayAlongView hierarchy. This eliminates the
+            // @MainActor saturation that caused 300–530ms MIDI scoring lag.
             InteractivePianoView(
                 activeMidiNotes: viewModel.effectiveMidiNotes,
+                highlightState: viewModel.highlightState,
                 activeCentsOffset: viewModel.currentPitch?.centsOffset ?? 0,
                 expectedMidiNote: viewModel.expectedMidiNote,
                 onNoteOn: { midiNote in
@@ -214,7 +218,8 @@ struct SongPlayAlongView: View {
             case .fallingNotes:
                 FallingNotesView(
                     noteEvents: viewModel.noteEvents,
-                    currentTime: viewModel.currentTime,
+                    playbackStartDate: viewModel.playbackStartDate,
+                    tempoScale: viewModel.tempoScale,
                     currentNoteIndex: viewModel.currentNoteIndex,
                     noteStates: viewModel.noteStates,
                     notationMode: viewModel.notationMode,
@@ -229,7 +234,7 @@ struct SongPlayAlongView: View {
                     currentNoteIndex: viewModel.currentNoteIndex,
                     notationMode: viewModel.notationMode,
                     currentPitch: viewModel.currentPitch,
-                    detectedSwarInfo: viewModel.detectedSwarInfo
+                    highlightState: viewModel.highlightState
                 )
                 .accessibilityLabel("Scrolling sheet notation")
                 .accessibilityHint("Sheet notation scrolls to follow the current note")

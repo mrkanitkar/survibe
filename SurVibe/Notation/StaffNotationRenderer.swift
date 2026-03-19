@@ -33,6 +33,12 @@ struct StaffNotationRenderer: View {
     /// Zoom scale from the parent container.
     let zoomScale: CGFloat
 
+    /// MIDI note number currently pressed on the keyboard, if any.
+    ///
+    /// When set, all noteheads matching this MIDI number are highlighted green
+    /// so the user can see which staff positions correspond to the pressed key.
+    var detectedMidiNote: Int? = nil
+
     // MARK: - Environment
 
     @Environment(\.colorScheme) private var colorScheme
@@ -92,12 +98,14 @@ struct StaffNotationRenderer: View {
                 // Draw notes
                 for (index, noteInfo) in layout.notes.enumerated() {
                     let isHighlighted = index == currentNoteIndex
+                    let isDetected = !noteInfo.isRest && noteInfo.midiNumber == detectedMidiNote
                     if noteInfo.isRest {
                         drawRest(context: &context, noteInfo: noteInfo, staffTop: staffTop)
                     } else {
                         drawNote(
                             context: &context, noteInfo: noteInfo,
-                            staffTop: staffTop, isHighlighted: isHighlighted
+                            staffTop: staffTop, isHighlighted: isHighlighted,
+                            isDetected: isDetected
                         )
                     }
                 }
@@ -195,12 +203,13 @@ struct StaffNotationRenderer: View {
         context: inout GraphicsContext,
         noteInfo: StaffNoteInfo,
         staffTop: CGFloat,
-        isHighlighted: Bool
+        isHighlighted: Bool,
+        isDetected: Bool = false
     ) {
         let centerX = noteInfo.xPosition
         let centerY = yForStaffPosition(noteInfo.staffYOffset, staffTop: staffTop)
 
-        // Highlight rectangle
+        // Playback highlight rectangle (accent color)
         if isHighlighted {
             let highlightRect = CGRect(
                 x: centerX - noteheadWidth,
@@ -210,6 +219,17 @@ struct StaffNotationRenderer: View {
             )
             let highlightColor: Color = .accentColor.opacity(0.2)
             context.fill(Path(roundedRect: highlightRect, cornerRadius: 4), with: .color(highlightColor))
+        }
+
+        // Key-press detection highlight (green glow behind notehead)
+        if isDetected {
+            let detectedRect = CGRect(
+                x: centerX - noteheadWidth * 1.2,
+                y: centerY - noteheadHeight * 2.5,
+                width: noteheadWidth * 2.4,
+                height: noteheadHeight * 5
+            )
+            context.fill(Path(roundedRect: detectedRect, cornerRadius: 5), with: .color(.green.opacity(0.25)))
         }
 
         // Ledger lines
@@ -236,7 +256,7 @@ struct StaffNotationRenderer: View {
             height: noteheadHeight
         )
 
-        let noteColor = isHighlighted ? Color.accentColor : staffSwiftUIColor
+        let noteColor: Color = isDetected ? .green : (isHighlighted ? .accentColor : staffSwiftUIColor)
         let ellipse = Path(ellipseIn: noteheadRect)
 
         if noteInfo.noteheadType.isFilled {
