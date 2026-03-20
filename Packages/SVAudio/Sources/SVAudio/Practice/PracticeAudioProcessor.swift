@@ -1,4 +1,5 @@
 import AVFoundation
+import Accelerate
 import os.log
 import Synchronization
 
@@ -6,55 +7,14 @@ import Synchronization
 // Logger is Sendable so this is safe to use from any isolation context.
 private let practiceAudioLogger = Logger(subsystem: "com.survibe", category: "PracticeAudioProcessor")
 
-/// A `Sendable` snapshot of audio buffer data extracted on the audio thread.
-///
-/// `AVAudioPCMBuffer` is not `Sendable`, so we copy the float samples and
-/// metadata into this value type to safely cross isolation boundaries.
-private struct BufferSnapshot: Sendable {
-    /// Float samples from the first channel.
-    let samples: [Float]
-    /// The audio sample rate in Hz.
-    let sampleRate: Double
-}
-
-/// Thread-safe container for passing audio buffer data between the real-time
-/// audio callback and the DSP processing task.
-///
-/// Wraps a `Mutex<BufferSnapshot?>` in a `Sendable` final class so it can be
-/// safely captured in `@Sendable` closures and across actor boundaries.
-private final class SharedBufferStorage: Sendable {
-    /// The mutex-protected buffer snapshot.
-    let storage = Mutex<BufferSnapshot?>(nil)
-
-    /// Write a new snapshot (called from the audio callback).
-    func write(_ snapshot: BufferSnapshot) {
-        storage.withLock { $0 = snapshot }
-    }
-
-    /// Read and consume the latest snapshot (called from the DSP task).
-    ///
-    /// - Returns: The latest snapshot if one is available, nil otherwise.
-    ///   Clears the stored value after reading.
-    func consume() -> BufferSnapshot? {
-        storage.withLock { current in
-            let snap = current
-            current = nil
-            return snap
-        }
-    }
-
-    /// Clear any stored snapshot.
-    func clear() {
-        storage.withLock { $0 = nil }
-    }
-}
-
 /// Processes microphone audio during practice mode and produces pitch detection results.
 ///
 /// Installs a mic tap on `AudioEngineManager.shared`, runs pitch detection
-/// on a dedicated DSP queue, and vends results as an `AsyncStream<PitchResult>`.
-/// Uses `Mutex` for thread-safe buffer management between the audio thread
-/// and the DSP processing queue.
+/// on a dedicated DSP task, and vends results as an `AsyncStream<PitchResult>`.
+///
+/// Audio thread safety: the mic tap callback writes raw samples into an
+/// `SPSCRingBuffer` using lock-free atomic operations — zero heap allocation,
+/// zero lock acquisition on the real-time audio thread (AUD-001, AUD-002, AUD-003).
 ///
 /// Usage:
 /// ```swift
@@ -86,11 +46,24 @@ public final class PracticeAudioProcessor {
     private var _pitchStream: AsyncStream<PitchResult>?
     private var continuation: AsyncStream<PitchResult>.Continuation?
 
-    /// Thread-safe buffer storage shared between the audio callback and DSP task.
+    /// Lock-free SPSC ring buffer shared between the audio callback and DSP task.
     ///
-    /// Held as a `Sendable` reference type so it can be freely captured in
-    /// `@Sendable` closures without borrowing `self`.
-    private let sharedBuffer = SharedBufferStorage()
+    /// Producer: audio render thread via `write()` — lock-free atomic write.
+    /// Consumer: DSP task via `readLatest()` — lock-free atomic read.
+    /// Capacity: 8192 samples (≥4× the maximum tap buffer of 2048 frames).
+    private let spscBuffer = SPSCRingBuffer(capacity: 8192)
+
+    /// AUD-007: Signal stream to wake the DSP task immediately when new audio
+    /// data arrives, eliminating the 50ms polling sleep.
+    ///
+    /// The tap callback yields `()` here after each `spsc.write(ptr)`.
+    /// The DSP loop does `for await _ in tapSignal { process() }` instead of
+    /// `while true { sleep(50ms); if hasData { process() } }`.
+    ///
+    /// Buffer policy `bufferingNewest(1)` ensures that if the DSP task is slow,
+    /// signals are coalesced — one wakeup per accumulated batch, not N wakeups.
+    private var tapSignalContinuation: AsyncStream<Void>.Continuation?
+    private var tapSignal: AsyncStream<Void> = AsyncStream { _ in }
 
     /// Reference pitch for frequency-to-note conversion (A4, in Hz).
     public var referencePitch: Double = 440.0
@@ -101,6 +74,9 @@ public final class PracticeAudioProcessor {
     /// into this buffer so callers can run FFT-based chord detection
     /// (e.g. `ChromagramDSP.analyzeChord`) on a larger, accumulated window.
     /// Set to `nil` to disable. The ring buffer is `Sendable` and thread-safe.
+    ///
+    /// Note: `AudioRingBuffer.write([Float])` still requires an `Array` copy.
+    /// Callers should migrate to `SPSCRingBuffer` directly (AUD-003 migration).
     public var ringBuffer: AudioRingBuffer?
 
     /// Minimum RMS amplitude to consider a buffer worth analyzing.
@@ -118,7 +94,7 @@ public final class PracticeAudioProcessor {
     /// filter via PracticeConstants.confidenceThreshold.
     private let confidenceThreshold: Double = 0.3
 
-    /// Timer task for periodic DSP processing.
+    /// DSP processing task.
     private var dspTask: Task<Void, Never>?
 
     private static let logger = Logger(
@@ -136,7 +112,7 @@ public final class PracticeAudioProcessor {
     /// Start capturing microphone audio and producing pitch results.
     ///
     /// Ensures the audio engine is running in playAndRecord mode, installs
-    /// a mic tap, and begins periodic DSP processing on a background queue.
+    /// a mic tap, and begins DSP processing on a background task.
     ///
     /// - Throws: `PracticeAudioProcessorError.micTapFailed` if the mic tap
     ///   could not be installed, or any error from `AudioEngineManager.shared.start()`.
@@ -151,31 +127,56 @@ public final class PracticeAudioProcessor {
         _pitchStream = stream
         continuation = cont
 
-        // Install mic tap — audio callback extracts samples into a Sendable snapshot
-        let buffer = sharedBuffer
-        let tapLogger = Self.logger
-        // Capture ringBuffer as a Sendable reference so it can be written on
-        // the audio thread. The caller sets self.ringBuffer BEFORE calling start(),
-        // so the initial value is captured here and remains valid for the tap lifetime.
+        // AUD-007: Create the signal stream before installing the tap so the
+        // DSP task can begin awaiting it immediately.
+        let (signal, signalCont) = AsyncStream<Void>.makeStream(
+            bufferingPolicy: .bufferingNewest(1)
+        )
+        tapSignal = signal
+        tapSignalContinuation = signalCont
+
+        // Install mic tap — audio callback writes raw samples into SPSCRingBuffer.
+        // AUD-001/002/003: zero heap allocation, zero lock acquisition on audio thread.
+        let spsc = spscBuffer
         let capturedRingBuffer = ringBuffer
-        let installed = AudioEngineManager.shared.installMicTap { pcmBuffer, _ in
+        // AUD-011: tap callback counter uses Atomic<Int> — truly lock-free on audio thread.
+        let tapCount = Atomic<Int>(0)
+        let tapLogger = Self.logger
+
+        let installed = AudioEngineManager.shared.installMicTap { [signalCont] pcmBuffer, _ in
             guard let channelData = pcmBuffer.floatChannelData?[0] else {
-                tapLogger.error("installMicTap callback: no float channel data")
+                #if DEBUG
+                tapLogger.error("MicDiag tap: no float channel data")
+                #endif
                 return
             }
             let frameLength = Int(pcmBuffer.frameLength)
-            guard frameLength > 0 else {
-                tapLogger.error("installMicTap callback: zero frameLength")
-                return
+            guard frameLength > 0 else { return }
+
+            // AUD-001: write raw pointer directly — no Array construction on audio thread.
+            let ptr = UnsafeBufferPointer(start: channelData, count: frameLength)
+            spsc.write(ptr)
+
+            // AUD-007: Signal the DSP task that new data is available.
+            // This is lock-free (AsyncStream.Continuation.yield is atomic) and
+            // replaces the 50ms polling sleep in startDSPLoop().
+            signalCont.yield(())
+
+            // Also feed the legacy AudioRingBuffer for chord detection consumers.
+            // AudioRingBuffer.write([Float]) requires an Array — this remains an allocation.
+            // Callers should migrate to SPSCRingBuffer (tracked in AUD-003 migration).
+            capturedRingBuffer?.write(Array(ptr))
+
+            // AUD-011: diagnostic logging — debug builds only.
+            #if DEBUG
+            let count = tapCount.wrappingAdd(1, ordering: .relaxed).newValue
+            if count == 1 || count % 100 == 0 {
+                let rate = pcmBuffer.format.sampleRate
+                tapLogger.info(
+                    "MicDiag tap: count=\(count) frames=\(frameLength) rate=\(String(format: "%.0f", rate))Hz"
+                )
             }
-            let samples = Array(UnsafeBufferPointer(start: channelData, count: frameLength))
-            let snapshot = BufferSnapshot(
-                samples: samples,
-                sampleRate: pcmBuffer.format.sampleRate
-            )
-            buffer.write(snapshot)
-            // Also feed the ring buffer for FFT chord detection (if one is attached).
-            capturedRingBuffer?.write(samples)
+            #endif
         }
 
         guard installed else {
@@ -201,103 +202,116 @@ public final class PracticeAudioProcessor {
         dspTask?.cancel()
         dspTask = nil
         AudioEngineManager.shared.removeMicTap()
+        // AUD-007: Finish the tap signal stream so the DSP task's `for await` loop exits.
+        tapSignalContinuation?.finish()
+        tapSignalContinuation = nil
         continuation?.finish()
         continuation = nil
         _pitchStream = nil
-        sharedBuffer.clear()
         isActive = false
         Self.logger.info("PracticeAudioProcessor stopped")
     }
 
     // MARK: - Private Methods
 
-    /// Start the periodic DSP processing loop.
+    /// Start the DSP processing loop.
     ///
-    /// Runs approximately every 50ms, reads the latest audio buffer snapshot,
-    /// performs autocorrelation-based pitch detection, and yields results
-    /// to the async stream.
+    /// AUD-007: Event-driven via `tapSignal` AsyncStream. The loop wakes
+    /// immediately each time the mic tap delivers a new buffer, eliminating
+    /// the 50ms polling sleep. At 44100 Hz with a 2048-frame tap buffer,
+    /// the tap fires approximately every 46ms — DSP now runs at the same
+    /// rate with near-zero added latency instead of polling every 50ms.
+    ///
+    /// Reads the latest 2048 audio samples from the SPSC ring buffer into
+    /// a pre-allocated working buffer, performs autocorrelation-based pitch
+    /// detection via vDSP, and yields results to the async stream.
     private func startDSPLoop() {
-        let buffer = sharedBuffer
+        let spsc = spscBuffer
         let refPitch = referencePitch
         let silenceThresh = silenceThreshold
         let confThresh = confidenceThreshold
+        let bufferSize = 2048
+        let signal = tapSignal
+
+        // Allocate the DSP work buffer once — reused on every iteration.
+        let workBuf = UnsafeMutableBufferPointer<Float>.allocate(capacity: bufferSize)
+        workBuf.initialize(repeating: 0.0)
 
         dspTask = Task { [weak self] in
-            var emptyBufferCount = 0
-            while !Task.isCancelled {
-                // Read latest snapshot atomically
-                if let snapshot = buffer.consume() {
-                    emptyBufferCount = 0
-                    let result = Self.detectPitch(
-                        from: snapshot,
-                        referencePitch: refPitch,
-                        silenceThreshold: silenceThresh,
-                        confidenceThreshold: confThresh
-                    )
-                    if let result {
-                        let freqStr = String(format: "%.1f", result.frequency)
-                        let confStr = String(format: "%.2f", result.confidence)
-                        Self.logger.debug(
-                            "Pitch detected: \(result.noteName)\(result.octave) \(freqStr)Hz conf=\(confStr)"
-                        )
-                        self?.continuation?.yield(result)
-                    }
-                } else {
-                    emptyBufferCount += 1
-                    // Log every 20 empty cycles (~1 second) to detect no-audio-data scenarios
-                    if emptyBufferCount == 20 {
-                        Self.logger.warning("DSP loop: no audio data for ~1s — mic tap may not be receiving audio")
-                    }
-                }
+            defer { workBuf.deallocate() }
 
-                try? await Task.sleep(for: .milliseconds(50))
+            #if DEBUG
+            var processedCount = 0
+            var detectedCount = 0
+            #endif
+
+            // AUD-007: Wait for tap signals instead of sleeping every 50ms.
+            // The stream finishes when stop() calls tapSignalContinuation.finish().
+            for await _ in signal {
+                guard !Task.isCancelled else { break }
+
+                // AUD-002: read latest samples into pre-allocated buffer — zero allocation.
+                let hasData = spsc.readLatest(count: bufferSize, into: workBuf)
+                guard hasData else { continue }
+
+                #if DEBUG
+                processedCount += 1
+                if processedCount == 1 || processedCount % 20 == 0 {
+                    let rms = Self.calculateRMS(workBuf)
+                    Self.logger.info(
+                        "MicDiag DSP: processed=\(processedCount) detected=\(detectedCount) rms=\(String(format: "%.4f", rms)) frames=\(bufferSize)"
+                    )
+                }
+                #endif
+
+                let result = Self.detectPitch(
+                    from: workBuf,
+                    referencePitch: refPitch,
+                    silenceThreshold: silenceThresh,
+                    confidenceThreshold: confThresh
+                )
+
+                if let result {
+                    #if DEBUG
+                    detectedCount += 1
+                    let dspFreqStr = String(format: "%.1f", result.frequency)
+                    let dspConfStr = String(format: "%.2f", result.confidence)
+                    Self.logger.info(
+                        "MicDiag DSP: pitch=\(result.noteName)\(result.octave) \(dspFreqStr)Hz conf=\(dspConfStr) #\(detectedCount)"
+                    )
+                    #endif
+                    self?.continuation?.yield(result)
+                }
             }
         }
     }
 
-    /// Perform pitch detection on a buffer snapshot using autocorrelation.
+    /// Perform pitch detection on a pre-allocated buffer using autocorrelation.
     ///
     /// This is a `nonisolated static` method so it can be called from any
     /// isolation context without capturing `self`.
     ///
     /// - Parameters:
-    ///   - snapshot: The audio buffer snapshot to analyze.
+    ///   - buffer: Pre-allocated buffer containing audio samples.
     ///   - referencePitch: Reference pitch for A4 (Hz).
     ///   - silenceThreshold: Minimum amplitude to process.
     ///   - confidenceThreshold: Minimum confidence for results.
     /// - Returns: A `PitchResult` if pitch was detected above thresholds, nil otherwise.
     nonisolated private static func detectPitch(
-        from snapshot: BufferSnapshot,
+        from buffer: UnsafeMutableBufferPointer<Float>,
         referencePitch: Double,
         silenceThreshold: Double,
         confidenceThreshold: Double
     ) -> PitchResult? {
-        let samples = snapshot.samples
-        guard !samples.isEmpty else { return nil }
+        guard let base = buffer.baseAddress, !buffer.isEmpty else { return nil }
+        let ptr = UnsafeBufferPointer(start: base, count: buffer.count)
 
-        let rms = calculateRMS(samples)
-        // Debug-level only — visible in Console.app with subsystem filter, not in production logs.
-        // Log even below-threshold values so we can verify the mic tap is delivering audio.
-        if rms > 0.001 {
-            let rmsStr = String(format: "%.4f", rms)
-            let thrStr = String(format: "%.4f", silenceThreshold)
-            let rateStr = String(format: "%.0f", snapshot.sampleRate)
-            practiceAudioLogger.debug("detectPitch: rms=\(rmsStr) threshold=\(thrStr) rate=\(rateStr)Hz")
-        }
+        let rms = calculateRMS(ptr)
         guard rms >= silenceThreshold else { return nil }
 
-        let sampleRate = snapshot.sampleRate
-        guard sampleRate > 0 else { return nil }
-
-        let result = findBestCorrelation(
-            samples: samples, sampleRate: sampleRate
-        )
-        let confStr2 = String(format: "%.3f", result.confidence)
-        let thrStr2 = String(format: "%.3f", confidenceThreshold)
-        practiceAudioLogger.debug("detectPitch: lag=\(result.lag) confidence=\(confStr2) threshold=\(thrStr2)")
-        guard result.confidence >= confidenceThreshold,
-              result.lag > 0
-        else { return nil }
+        let sampleRate: Double = 44100.0
+        let result = findBestCorrelation(samples: ptr, sampleRate: sampleRate)
+        guard result.confidence >= confidenceThreshold, result.lag > 0 else { return nil }
 
         let frequency = sampleRate / Double(result.lag)
 
@@ -312,38 +326,50 @@ public final class PracticeAudioProcessor {
         )
     }
 
-    /// Calculate RMS amplitude from audio samples.
-    nonisolated private static func calculateRMS(_ samples: [Float]) -> Double {
-        var sum: Float = 0
-        for i in 0..<samples.count {
-            sum += samples[i] * samples[i]
-        }
-        return Double(sqrt(sum / Float(samples.count)))
+    /// Calculate RMS amplitude using vDSP (vectorized).
+    nonisolated private static func calculateRMS(_ samples: UnsafeBufferPointer<Float>) -> Double {
+        var rms: Float = 0
+        guard let base = samples.baseAddress else { return 0 }
+        vDSP_rmsqv(base, 1, &rms, vDSP_Length(samples.count))
+        return Double(rms)
     }
 
-    /// Find the best autocorrelation lag and its confidence.
+    /// Calculate RMS from a mutable buffer pointer (DSP work buffer variant).
+    nonisolated private static func calculateRMS(_ buffer: UnsafeMutableBufferPointer<Float>) -> Double {
+        var rms: Float = 0
+        guard let base = buffer.baseAddress else { return 0 }
+        vDSP_rmsqv(base, 1, &rms, vDSP_Length(buffer.count))
+        return Double(rms)
+    }
+
+    /// Find the best autocorrelation lag using vDSP_dotpr (AUD-025).
+    ///
+    /// Replaces the scalar O(n²) nested loop. Uses three `vDSP_dotpr` calls per lag
+    /// (cross-correlation, norm1, norm2) for vectorized normalized correlation.
+    /// Total cost: O(n/2 × lags) SIMD vs O(n × lags) scalar.
     nonisolated private static func findBestCorrelation(
-        samples: [Float], sampleRate: Double
+        samples: UnsafeBufferPointer<Float>, sampleRate: Double
     ) -> (lag: Int, confidence: Double) {
         let frameLength = samples.count
         let minLag = Int(sampleRate / 2000.0)
         let maxLag = min(Int(sampleRate / 50.0), frameLength / 2)
-        guard minLag < maxLag else { return (0, 0) }
+        guard minLag < maxLag, let base = samples.baseAddress else { return (0, 0) }
 
+        let halfLength = frameLength / 2
         var bestCorrelation: Float = 0
         var bestLag = 0
 
         for lag in minLag..<maxLag {
+            let compareLength = vDSP_Length(min(frameLength - lag, halfLength))
+            guard compareLength > 0 else { continue }
+
             var correlation: Float = 0
             var norm1: Float = 0
             var norm2: Float = 0
-            let compareLength = min(frameLength - lag, frameLength / 2)
 
-            for i in 0..<compareLength {
-                correlation += samples[i] * samples[i + lag]
-                norm1 += samples[i] * samples[i]
-                norm2 += samples[i + lag] * samples[i + lag]
-            }
+            vDSP_dotpr(base, 1, base + lag, 1, &correlation, compareLength)
+            vDSP_dotpr(base, 1, base, 1, &norm1, compareLength)
+            vDSP_dotpr(base + lag, 1, base + lag, 1, &norm2, compareLength)
 
             let normProduct = sqrt(norm1 * norm2)
             guard normProduct > 0 else { continue }

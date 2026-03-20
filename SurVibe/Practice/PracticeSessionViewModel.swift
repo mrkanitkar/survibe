@@ -71,6 +71,14 @@ final class PracticeSessionViewModel {
     /// Longest streak of non-miss notes.
     private(set) var longestStreak: Int = 0
 
+    /// AUD-017: Running accuracy sum for O(1) average computation.
+    /// Avoids `PracticeScoring.averageAccuracy` O(n) reduce on every HUD render.
+    private(set) var liveAccuracySum: Double = 0
+
+    /// AUD-017: Current streak of consecutive non-miss notes.
+    /// Maintained incrementally so `PracticeHUD` never calls `PracticeScoring.longestStreak`.
+    private(set) var liveStreak: Int = 0
+
     /// Wait Mode engine for note-by-note practice.
     private(set) var waitModeEngine = WaitModeEngine()
 
@@ -181,7 +189,7 @@ final class PracticeSessionViewModel {
 
         // Load the SoundFont for playback
         do {
-            try SoundFontManager.shared.loadBundledPiano()
+            try await SoundFontManager.shared.loadBundledPiano()
         } catch {
             Self.logger.error("SoundFont load failed: \(error.localizedDescription)")
         }
@@ -197,6 +205,8 @@ final class PracticeSessionViewModel {
         starRating = 0
         xpEarned = 0
         longestStreak = 0
+        liveAccuracySum = 0
+        liveStreak = 0
         elapsedPracticeTime = 0
 
         // Configure raga-aware scoring if song has a raga
@@ -388,6 +398,8 @@ final class PracticeSessionViewModel {
         starRating = 0
         xpEarned = 0
         longestStreak = 0
+        liveAccuracySum = 0
+        liveStreak = 0
         elapsedPracticeTime = 0
 
         AnalyticsManager.shared.track(
@@ -520,6 +532,9 @@ final class PracticeSessionViewModel {
             ragaContext: ragaScoringContext
         )
         noteScores.append(score)
+        // AUD-017: Maintain live counters incrementally — O(1) per note.
+        liveAccuracySum += score.accuracy
+        liveStreak = score.grade == .miss ? 0 : liveStreak + 1
         if pitch.noteName == expectedName && pitch.octave == expected.octave {
             currentPracticeNoteIndex += 1
             if currentPracticeNoteIndex >= sargamNotes.count {

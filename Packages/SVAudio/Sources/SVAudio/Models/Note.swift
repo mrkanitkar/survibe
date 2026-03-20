@@ -47,3 +47,23 @@ public enum Swar: String, CaseIterable, Sendable {
         UInt8(clamping: 60 + (octave - 4) * 12 + midiOffset)
     }
 }
+
+// MARK: - O(1) Lookup Tables (AUD-029)
+
+extension Swar {
+    /// Maps semitone offset (0–11) to the Swar name string.
+    ///
+    /// Use instead of `Swar.allCases.first { $0.midiOffset == n }?.rawValue`
+    /// for O(1) lookup during MIDI note-on events at 44100 Hz render rate.
+    public static let nameForSemitone: [Int: String] = {
+        Dictionary(uniqueKeysWithValues: allCases.map { ($0.midiOffset, $0.rawValue) })
+    }()
+
+    /// Maps semitone offset (0–11) to the `Swar` enum case.
+    ///
+    /// Use instead of `Swar.allCases.first { $0.midiOffset == n }` for O(1)
+    /// lookup when you need the full enum value (e.g. for frequency calculation).
+    public static let swarForSemitone: [Int: Swar] = {
+        Dictionary(uniqueKeysWithValues: allCases.map { ($0.midiOffset, $0) })
+    }()
+}

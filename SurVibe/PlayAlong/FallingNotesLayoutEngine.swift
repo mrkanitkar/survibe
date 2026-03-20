@@ -114,27 +114,36 @@ enum FallingNotesLayoutEngine {
     /// from black keys when `keyPositions` has not yet been populated.
     private static let naturalOffsets: Set<Int> = [0, 2, 4, 5, 7, 9, 11]
 
-    /// Find the horizontal center X position for a MIDI note.
+    /// Build an O(1) lookup map from MIDI note number to center-X position.
     ///
-    /// First attempts to look up the measured position in `keyPositions` (accurate,
-    /// reported by `InteractivePianoView` via `KeyPositionPreference`). If the array
-    /// is empty — which happens on the first render pass before the preference fires —
-    /// falls back to a geometric approximation based on a standard 61-key piano layout
-    /// so that notes are visible immediately rather than producing a blank screen.
+    /// AUD-027: Build once when `keyPositions` changes (in `FallingNotesView.onChange`).
+    /// Each `noteX(midiNote:keyPositionMap:viewWidth:)` call then does a dictionary
+    /// lookup instead of an O(n) linear scan.
+    ///
+    /// - Parameter keyPositions: Array of key positions reported by the piano keyboard.
+    /// - Returns: Dictionary mapping MIDI note number to center-X in points.
+    static func buildKeyPositionMap(_ keyPositions: [KeyPosition]) -> [UInt8: CGFloat] {
+        Dictionary(uniqueKeysWithValues: keyPositions.map { ($0.midiNote, $0.centerX) })
+    }
+
+    /// Find the horizontal center X position for a MIDI note using a pre-built map.
+    ///
+    /// AUD-027: O(1) dictionary lookup replaces the O(n) `first(where:)` scan.
+    /// Falls back to geometric approximation when the map is empty (first render).
     ///
     /// - Parameters:
     ///   - midiNote: MIDI note number to locate.
-    ///   - keyPositions: Array of key positions from the piano keyboard view.
-    ///   - viewWidth: Width of the canvas in points, used for the fallback calculation.
-    /// - Returns: Center X of the matching key, or `nil` if the note is outside the keyboard range.
+    ///   - keyPositionMap: Pre-built map from `buildKeyPositionMap(_:)`.
+    ///   - viewWidth: Canvas width in points, used for the fallback calculation.
+    /// - Returns: Center X of the matching key, or `nil` if out of keyboard range.
     static func noteX(
         midiNote: UInt8,
-        keyPositions: [KeyPosition],
+        keyPositionMap: [UInt8: CGFloat],
         viewWidth: CGFloat = 390
     ) -> CGFloat? {
-        // Fast path: use measured positions once the piano has laid out.
-        if let pos = keyPositions.first(where: { $0.midiNote == midiNote }) {
-            return pos.centerX
+        // O(1) fast path: use pre-built map.
+        if let centerX = keyPositionMap[midiNote] {
+            return centerX
         }
 
         // Fallback: approximate position from standard 61-key piano geometry.
@@ -155,7 +164,49 @@ enum FallingNotesLayoutEngine {
             let offset = ((midi - 60) % 12 + 12) % 12
             let isNatural = naturalOffsets.contains(offset)
             if midi == note {
-                // White key: center of its slot. Black key: between the two adjacent white keys.
+                return isNatural
+                    ? (CGFloat(whiteIndex) + 0.5) * whiteKeyWidth
+                    : CGFloat(whiteIndex) * whiteKeyWidth
+            }
+            if isNatural { whiteIndex += 1 }
+        }
+        return nil
+    }
+
+    /// Find the horizontal center X position for a MIDI note.
+    ///
+    /// - Parameters:
+    ///   - midiNote: MIDI note number to locate.
+    ///   - keyPositions: Array of key positions from the piano keyboard view.
+    ///   - viewWidth: Width of the canvas in points, used for the fallback calculation.
+    /// - Returns: Center X of the matching key, or `nil` if the note is outside the keyboard range.
+    static func noteX(
+        midiNote: UInt8,
+        keyPositions: [KeyPosition],
+        viewWidth: CGFloat = 390
+    ) -> CGFloat? {
+        // Fast path: use measured positions once the piano has laid out.
+        if let pos = keyPositions.first(where: { $0.midiNote == midiNote }) {
+            return pos.centerX
+        }
+
+        // Fallback: approximate position from standard 61-key piano geometry.
+        let startMIDI = 36  // C2
+        let endMIDI   = 96  // C7
+        let note = Int(midiNote)
+        guard note >= startMIDI && note <= endMIDI else { return nil }
+
+        let whiteKeyCount = (startMIDI...endMIDI)
+            .filter { naturalOffsets.contains((($0 - 60) % 12 + 12) % 12) }
+            .count
+        guard whiteKeyCount > 0 else { return nil }
+        let whiteKeyWidth = viewWidth / CGFloat(whiteKeyCount)
+
+        var whiteIndex = 0
+        for midi in startMIDI...endMIDI {
+            let offset = ((midi - 60) % 12 + 12) % 12
+            let isNatural = naturalOffsets.contains(offset)
+            if midi == note {
                 return isNatural
                     ? (CGFloat(whiteIndex) + 0.5) * whiteKeyWidth
                     : CGFloat(whiteIndex) * whiteKeyWidth

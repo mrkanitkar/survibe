@@ -69,16 +69,22 @@ struct PracticeHUD: View {
     // MARK: - Computed Properties
 
     /// Formatted accuracy percentage or a dash when no scores exist.
+    ///
+    /// AUD-017: Reads `liveAccuracySum` (maintained incrementally in ViewModel)
+    /// instead of calling `PracticeScoring.averageAccuracy` (O(n) reduce) per render.
     private var accuracyText: String {
-        guard !viewModel.noteScores.isEmpty else { return "\u{2014}" }
-        let avg = PracticeScoring.averageAccuracy(scores: viewModel.noteScores)
+        let count = viewModel.noteScores.count
+        guard count > 0 else { return "\u{2014}" }
+        let avg = viewModel.liveAccuracySum / Double(count)
         return "\(Int(avg * 100))%"
     }
 
-    /// Longest consecutive non-miss streak from scored notes.
+    /// Current consecutive non-miss streak.
+    ///
+    /// AUD-017: Reads `liveStreak` (maintained incrementally in ViewModel)
+    /// instead of calling `PracticeScoring.longestStreak` (O(n) walk) per render.
     private var currentStreak: Int {
-        let grades = viewModel.noteScores.map(\.grade)
-        return PracticeScoring.longestStreak(grades: grades)
+        viewModel.liveStreak
     }
 
     /// Current note index out of total notes (e.g., "3/12").

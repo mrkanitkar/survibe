@@ -322,7 +322,7 @@ struct InteractivePianoView: View {
     private func loadSoundFontIfNeeded() async {
         guard !isSoundFontLoaded else { return }
         do {
-            try SoundFontManager.shared.loadBundledPiano()
+            try await SoundFontManager.shared.loadBundledPiano()
             isSoundFontLoaded = true
         } catch {
             // Non-fatal: keyboard touch will still work, just no sound

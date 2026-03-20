@@ -7,7 +7,7 @@ import SVCore
 import Synchronization
 import os.log
 
-/// Module-level logger — not actor-isolated, safe from any context.
+/// Module-level logger for @MainActor-isolated methods of PitchDetectionViewModel.
 private let vmLogger = Logger(subsystem: "com.survibe", category: "PitchDetectionVM")
 
 /// Carries a single DSP result from the processing queue to MainActor.
@@ -261,7 +261,7 @@ private extension PitchDetectionViewModel {
             if context.mode == .chord || context.mode == .both { context.ringBuf?.write(samples) }
             let bufNum = context.counter.increment()
             if bufNum % 50 == 1 {
-                vmLogger.info("Tap #\(bufNum): frames=\(frameLength) rate=\(sampleRate)")
+                PitchDSP.logger.info("Tap #\(bufNum): frames=\(frameLength) rate=\(sampleRate)")
             }
             context.queue.async {
                 guard !context.flag.isSet else { return }
@@ -277,7 +277,7 @@ private extension PitchDetectionViewModel {
         samples: [Float], sampleRate: Double, bufNum: Int, context: TapContext
     ) {
         let amplitude = PitchDSP.calculateRMS(samples)
-        if bufNum % 50 == 1 { vmLogger.info("Buf #\(bufNum) amp=\(String(format: "%.6f", amplitude))") }
+        if bufNum % 50 == 1 { PitchDSP.logger.info("Buf #\(bufNum) amp=\(String(format: "%.6f", amplitude))") }
         let melody = runMelodyPipeline(
             samples: samples, sampleRate: sampleRate,
             amplitude: amplitude, mode: context.mode, refPitch: context.refPitch)
@@ -344,8 +344,9 @@ private extension PitchDetectionViewModel {
         }
         if let cents = centsForExpression {
             centsHistory.append(cents)
+            // AUD-018: removeFirst() is O(1) amortized vs O(n) Array(suffix()) copy.
             if centsHistory.count > centsHistoryMaxSize {
-                centsHistory = Array(centsHistory.suffix(centsHistoryMaxSize))
+                centsHistory.removeFirst()
             }
             if centsHistory.count >= 10 {
                 currentExpression = PitchExpressionAnalyzer.analyze(
@@ -386,19 +387,27 @@ struct DetectedNote: Identifiable {
 /// Thread-safe boolean flag using Mutex for compiler-verified Sendable.
 private final class AtomicFlag: Sendable {
     private let value = Mutex<Bool>(false)
-    var isSet: Bool { value.withLock { $0 } }
-    func set() { value.withLock { $0 = true } }
+    // nonisolated: Mutex.withLock is itself nonisolated; safe from any thread.
+    nonisolated var isSet: Bool { value.withLock { $0 } }
+    nonisolated func set() { value.withLock { $0 = true } }
 }
 
 /// Thread-safe counter using Mutex for compiler-verified Sendable.
 private final class AtomicCounter: Sendable {
     private let value = Mutex<Int>(0)
     @discardableResult
-    func increment() -> Int { value.withLock { $0 += 1; return $0 } }
+    // nonisolated: Mutex.withLock is itself nonisolated; safe from any thread.
+    nonisolated func increment() -> Int { value.withLock { $0 += 1; return $0 } }
 }
 
 /// Stateless DSP functions for pitch detection. Safe to call from any thread.
-enum PitchDSP {
+/// `nonisolated` on the enum opts out of implicit `@MainActor` isolation
+/// from `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` in the app target.
+nonisolated enum PitchDSP {
+    /// Logger for DSP diagnostics — declared here (nonisolated context) so it
+    /// can be used from @Sendable mic tap closures and nonisolated static methods.
+    static let logger = Logger(subsystem: "com.survibe", category: "PitchDetectionVM")
+
     /// Result of pitch detection with spectral confidence.
     struct DetectionResult {
         let frequency: Double

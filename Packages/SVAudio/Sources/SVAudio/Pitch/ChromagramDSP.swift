@@ -1,5 +1,7 @@
 import Accelerate
 import Foundation
+import os
+import Synchronization
 
 // MARK: - Latency Preset
 
@@ -79,6 +81,54 @@ public enum ChromagramDSP {
     /// Minimum match score for chord template matching.
     private static let minChordMatchScore: Double = 0.6
 
+    // MARK: - Caches (AUD-026, AUD-032)
+
+    /// Cache for `vDSP_FFTSetup` objects keyed by log2(fftSize).
+    ///
+    /// AUD-026: Creating an FFT setup is expensive (~microseconds + allocation).
+    /// SurVibe uses four fixed FFT sizes (2048, 4096, 8192, 16384 — one per
+    /// LatencyPreset). After the first chord detection call per preset, the setup
+    /// is reused for all subsequent calls.
+    ///
+    /// `OpaquePointer` is not `Sendable`, so we store raw `Int` (bit-cast) and
+    /// access under a `Mutex` for compiler-verified thread safety.
+    private nonisolated(unsafe) static let fftCache = Mutex<[vDSP_Length: Int]>([:])
+
+    /// Cache for Hann window arrays keyed by sample count.
+    ///
+    /// AUD-032: At ultraFast (1024-sample window, 44Hz detection rate), recomputing
+    /// the Hann window on every call allocates a 4KB array 44 times/second = 176KB/s.
+    /// Cached once per preset size, reused for all subsequent calls.
+    private nonisolated(unsafe) static let hannCache = Mutex<[Int: [Float]]>([:])
+
+    /// Return a cached `FFTSetup` for the given log2(n), creating it if needed.
+    ///
+    /// - Parameter log2n: `log2(fftSize)` as a `vDSP_Length`.
+    /// - Returns: A valid `OpaquePointer` to the FFT setup, or `nil` if creation fails.
+    nonisolated private static func cachedFFTSetup(_ log2n: vDSP_Length) -> OpaquePointer? {
+        fftCache.withLock { cache in
+            if let existing = cache[log2n] {
+                return OpaquePointer(bitPattern: existing)
+            }
+            guard let setup = vDSP_create_fftsetup(log2n, FFTRadix(kFFTRadix2)) else {
+                return nil
+            }
+            cache[log2n] = Int(bitPattern: setup)
+            return setup
+        }
+    }
+
+    /// Return a cached Hann window for the given sample count, creating it if needed.
+    nonisolated private static func cachedHannWindow(count: Int) -> [Float] {
+        hannCache.withLock { cache in
+            if let existing = cache[count] { return existing }
+            var window = [Float](repeating: 0, count: count)
+            vDSP_hann_window(&window, vDSP_Length(count), Int32(vDSP_HANN_NORM))
+            cache[count] = window
+            return window
+        }
+    }
+
     /// Western note names indexed by pitch class (0 = C).
     private static let westernNames = [
         "C", "Db", "D", "Eb", "E", "F",
@@ -100,8 +150,8 @@ public enum ChromagramDSP {
     nonisolated public static func applyHannWindow(_ samples: [Float]) -> [Float] {
         let count = samples.count
         guard count > 0 else { return [] }
-        var window = [Float](repeating: 0, count: count)
-        vDSP_hann_window(&window, vDSP_Length(count), Int32(vDSP_HANN_NORM))
+        // AUD-032: Use cached Hann window — no allocation after first call per size.
+        let window = cachedHannWindow(count: count)
         var result = [Float](repeating: 0, count: count)
         vDSP_vmul(samples, 1, window, 1, &result, 1, vDSP_Length(count))
         return result
@@ -124,11 +174,12 @@ public enum ChromagramDSP {
         fftSize: Int
     ) -> [Float] {
         let log2n = vDSP_Length(log2(Float(fftSize)))
-        guard let fftSetup = vDSP_create_fftsetup(log2n, FFTRadix(kFFTRadix2)) else {
+        // AUD-026: Use cached FFT setup — no allocation after first call per fftSize.
+        guard let fftSetup = cachedFFTSetup(log2n) else {
             assertionFailure("vDSP_create_fftsetup failed for log2n=\(log2n) — insufficient memory or invalid size")
             return [Float](repeating: 0, count: fftSize / 2)
         }
-        defer { vDSP_destroy_fftsetup(fftSetup) }
+        // No defer { vDSP_destroy_fftsetup } — setup is kept alive in fftCache.
 
         let halfN = fftSize / 2
 

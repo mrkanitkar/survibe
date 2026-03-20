@@ -73,13 +73,19 @@ final class SongPlaybackEngine {
     /// continues seamlessly.
     private var pauseOffset: TimeInterval = 0
 
-    /// Timer that fires at ~30 Hz to update `currentPosition`,
-    /// `currentNoteIndex`, and `nextNoteIndex` for UI consumers.
-    private var displayLinkTimer: Timer?
+    /// AUD-010: Task-based display loop replaces `Timer` + `Task { @MainActor }`.
+    /// A single Task sleeping 33 ms (~30 Hz) avoids the extra actor hop that
+    /// `Timer` + `Task { @MainActor in }` incurred per tick.
+    private var displayLinkTask: Task<Void, Never>?
 
-    /// Tasks responsible for scheduling individual MIDI note playback.
-    /// Cancelled on pause/stop to silence pending notes.
-    private var scheduledNoteTasks: [Task<Void, Never>] = []
+    /// AUD-035: Single sequential playback Task replaces per-note Task array.
+    /// Eliminates O(n) task-object allocation at `scheduleNotes(from:)` call time
+    /// and reduces cancellation cost from O(n) to O(1).
+    private var playbackTask: Task<Void, Never>?
+
+    /// AUD-030: Forward-only cursor for O(1) note lookup during playback.
+    /// Monotonically advanced; never reset during active playback.
+    private var positionCursor: Int = 0
 
     private static let logger = Logger(
         subsystem: "com.survibe",
@@ -145,7 +151,7 @@ final class SongPlaybackEngine {
             // Start the audio engine and load the bundled piano SoundFont
             // so that playNote() calls actually produce sound.
             do {
-                try SoundFontManager.shared.loadBundledPiano()
+                try await SoundFontManager.shared.loadBundledPiano()
             } catch {
                 Self.logger.error(
                     "SoundFont load failed: \(error.localizedDescription)"
@@ -191,6 +197,7 @@ final class SongPlaybackEngine {
         }
 
         pauseOffset = 0
+        positionCursor = 0
         playbackStartTime = Date()
         playbackState = .playing
 
@@ -252,6 +259,7 @@ final class SongPlaybackEngine {
             return
         }
 
+        positionCursor = 0  // scheduleNotes resets this, but zero here for clarity
         playbackStartTime = Date().addingTimeInterval(-pauseOffset)
         playbackState = .playing
 
@@ -291,28 +299,33 @@ final class SongPlaybackEngine {
 
     // MARK: - Private Methods — Display Link
 
-    /// Start a 30 Hz repeating timer to update playback position and note indices.
+    /// Start a ~30 Hz Task loop to update playback position and note indices.
+    ///
+    /// AUD-010: Uses a Task instead of `Timer` + `Task { @MainActor in }`,
+    /// eliminating the extra actor hop per tick that Timer callbacks incurred.
     private func startDisplayLink() {
         stopDisplayLink()
-        displayLinkTimer = Timer.scheduledTimer(
-            withTimeInterval: 1.0 / 30.0,
-            repeats: true
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
+        displayLinkTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(33))
+                guard !Task.isCancelled else { return }
                 self?.updatePlaybackPosition()
             }
         }
     }
 
-    /// Invalidate and release the display timer.
+    /// Cancel the display loop task.
     private func stopDisplayLink() {
-        displayLinkTimer?.invalidate()
-        displayLinkTimer = nil
+        displayLinkTask?.cancel()
+        displayLinkTask = nil
     }
 
     /// Compute the current playback position from wall-clock elapsed time,
     /// update `currentNoteIndex` and `nextNoteIndex` for UI highlighting,
     /// and detect playback completion.
+    ///
+    /// AUD-030: Uses forward-only `positionCursor` for O(1) amortised note
+    /// lookup — advances past expired events, breaks at first future event.
     private func updatePlaybackPosition() {
         guard playbackState == .playing,
             let startTime = playbackStartTime
@@ -323,19 +336,24 @@ final class SongPlaybackEngine {
         let elapsed = Date().timeIntervalSince(startTime)
         currentPosition = min(elapsed, duration)
 
-        // Find the current note: last event where timestamp <= position
-        // AND position < timestamp + duration (note is still sounding).
+        // AUD-030: Advance cursor past events whose end time has passed.
+        while positionCursor < midiEvents.count,
+              midiEvents[positionCursor].timestamp + midiEvents[positionCursor].duration < currentPosition {
+            positionCursor += 1
+        }
+
+        // Find the active note at or just before cursor.
         var foundCurrent: Int?
         var foundNext: Int?
 
-        for (index, event) in midiEvents.enumerated() {
+        if positionCursor < midiEvents.count {
+            let event = midiEvents[positionCursor]
             if event.timestamp <= currentPosition,
-                currentPosition < event.timestamp + event.duration
-            {
-                foundCurrent = index
-            }
-            if event.timestamp > currentPosition, foundNext == nil {
-                foundNext = index
+               currentPosition < event.timestamp + event.duration {
+                foundCurrent = positionCursor
+                foundNext = positionCursor + 1 < midiEvents.count ? positionCursor + 1 : nil
+            } else if event.timestamp > currentPosition {
+                foundNext = positionCursor
             }
         }
 
@@ -378,53 +396,66 @@ final class SongPlaybackEngine {
 
     /// Schedule MIDI note playback from the given time offset.
     ///
-    /// Creates one Swift Task per MIDI event that sleeps until the event's
-    /// scheduled time, then triggers `playMIDINote(_:)`. Events with
-    /// timestamps before `offset` are skipped (already played).
+    /// AUD-035: Replaced per-note Task array with a single sequential Task loop
+    /// matching `PlayAlongViewModel.runPlaybackLoop`. Eliminates O(n) task-object
+    /// allocation and reduces cancellation cost from O(n) to O(1).
     ///
-    /// - Parameter offset: Time offset in seconds. Events before this
-    ///   point are not scheduled.
+    /// Uses `ContinuousClock.sleep(until:)` for absolute-time scheduling to avoid
+    /// drift from accumulated relative sleeps.
+    ///
+    /// - Parameter offset: Time offset in seconds. Events before this point are skipped.
     private func scheduleNotes(from offset: TimeInterval) {
         cancelScheduledNotes()
+        positionCursor = 0  // reset forward cursor when (re-)scheduling from offset
 
-        for event in midiEvents {
-            guard event.timestamp >= offset else { continue }
-            let delay = event.timestamp - offset
-            let task = Task { [weak self] in
-                try? await Task.sleep(for: .seconds(delay))
+        let events = midiEvents
+        let startDate = playbackStartTime ?? Date()
+
+        playbackTask = Task { [weak self] in
+            let clock = ContinuousClock()
+            let taskStart = clock.now
+
+            for event in events {
                 guard !Task.isCancelled else { return }
-                self?.playMIDINote(event)
+                guard event.timestamp >= offset else { continue }
+
+                // Absolute-time sleep — no drift from cumulative relative sleeps.
+                let targetDelay = event.timestamp - offset
+                let wakePoint = taskStart.advanced(by: .seconds(targetDelay))
+                try? await clock.sleep(until: wakePoint)
+                guard !Task.isCancelled else { return }
+
+                guard let self else { return }
+                guard self.playbackState == .playing else { return }
+
+                SoundFontManager.shared.playNote(
+                    midiNote: event.noteNumber,
+                    velocity: event.velocity
+                )
+
+                // Schedule note-off via a lightweight nested sleep (not added to task array).
+                let duration = event.duration
+                let noteNumber = event.noteNumber
+                Task {
+                    try? await Task.sleep(for: .seconds(duration))
+                    SoundFontManager.shared.stopNote(midiNote: noteNumber)
+                }
             }
-            scheduledNoteTasks.append(task)
-        }
-    }
 
-    /// Play a single MIDI note through SoundFontManager, then schedule
-    /// note-off after the event's duration.
-    ///
-    /// - Parameter event: The MIDI event to play.
-    private func playMIDINote(_ event: MIDIEvent) {
-        guard playbackState == .playing else { return }
-        SoundFontManager.shared.playNote(
-            midiNote: event.noteNumber,
-            velocity: event.velocity
-        )
-
-        // Schedule note-off after the note's duration.
-        let noteOffTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(event.duration))
+            // All notes scheduled — wait for the song end, then complete.
+            guard let self, !Task.isCancelled else { return }
+            let endDelay = (events.last.map { $0.timestamp + $0.duration } ?? 0) - offset
+            let endPoint = taskStart.advanced(by: .seconds(max(endDelay, 0)))
+            try? await ContinuousClock().sleep(until: endPoint)
             guard !Task.isCancelled else { return }
-            guard self != nil else { return }
-            SoundFontManager.shared.stopNote(midiNote: event.noteNumber)
+            _ = startDate  // silence unused warning
+            await MainActor.run { [weak self] in self?.handlePlaybackCompletion() }
         }
-        scheduledNoteTasks.append(noteOffTask)
     }
 
-    /// Cancel all pending note-scheduling tasks.
+    /// Cancel the single sequential playback task.
     private func cancelScheduledNotes() {
-        for task in scheduledNoteTasks {
-            task.cancel()
-        }
-        scheduledNoteTasks.removeAll()
+        playbackTask?.cancel()
+        playbackTask = nil
     }
 }

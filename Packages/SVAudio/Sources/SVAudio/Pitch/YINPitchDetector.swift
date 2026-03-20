@@ -5,6 +5,10 @@ import Accelerate
 /// Fallback YIN autocorrelation pitch detector using Accelerate/vDSP.
 /// Uses direct AVAudioEngine installTap for buffer access.
 /// Independent of AudioKit — works with raw AVAudioEngine.
+///
+/// AUD-004: YIN runs on a dedicated DSP queue — the audio render thread only
+/// copies samples (8KB memcpy) and dispatches to the queue. No O(n²) work
+/// on the real-time thread.
 @MainActor
 public final class YINPitchDetector: PitchDetectorProtocol {
     private var continuation: AsyncStream<PitchResult>.Continuation?
@@ -18,6 +22,12 @@ public final class YINPitchDetector: PitchDetectorProtocol {
 
     /// Current detector status for UI feedback (consistent with AudioKitPitchDetector API).
     public private(set) var status: String = "Idle"
+
+    /// Dedicated queue for YIN DSP — keeps audio render thread clear (AUD-004).
+    private let processingQueue = DispatchQueue(
+        label: "com.survibe.yin-detection",
+        qos: .userInteractive
+    )
 
     public init() {}
 
@@ -33,10 +43,11 @@ public final class YINPitchDetector: PitchDetectorProtocol {
 
             let refPitch = self.referencePitch
             let yinThreshold = self.threshold
+            let queue = self.processingQueue
 
             AudioEngineManager.shared.installMicTap { buffer, _ in
                 Self.handleMicTap(
-                    buffer: buffer, continuation: continuation,
+                    buffer: buffer, queue: queue, continuation: continuation,
                     refPitch: refPitch, yinThreshold: yinThreshold
                 )
             }
@@ -51,9 +62,13 @@ public final class YINPitchDetector: PitchDetectorProtocol {
         return stream
     }
 
-    /// Process a mic buffer and yield a pitch result.
+    /// Copy samples from the mic tap and dispatch YIN to the DSP queue (AUD-004).
+    ///
+    /// The audio render thread only performs: RMS check + Array copy + queue.async.
+    /// All O(n²) YIN computation runs on `processingQueue`.
     nonisolated private static func handleMicTap(
         buffer: AVAudioPCMBuffer,
+        queue: DispatchQueue,
         continuation: AsyncStream<PitchResult>.Continuation,
         refPitch: Double,
         yinThreshold: Double
@@ -62,6 +77,7 @@ public final class YINPitchDetector: PitchDetectorProtocol {
         let frameLength = Int(buffer.frameLength)
         guard frameLength > 0 else { return }
 
+        // Fast amplitude check on audio thread (single vDSP call, no allocation).
         var rms: Float = 0
         vDSP_rmsqv(channelData, 1, &rms, vDSP_Length(frameLength))
         let amplitude = Double(rms)
@@ -71,9 +87,29 @@ public final class YINPitchDetector: PitchDetectorProtocol {
             return
         }
 
+        // AUD-004: copy samples to [Float] and defer all YIN computation off the audio thread.
+        let samples = Array(UnsafeBufferPointer(start: channelData, count: frameLength))
+        let sampleRate = buffer.format.sampleRate
+
+        queue.async {
+            processYIN(
+                samples: samples, amplitude: amplitude, sampleRate: sampleRate,
+                continuation: continuation, refPitch: refPitch, yinThreshold: yinThreshold
+            )
+        }
+    }
+
+    /// Run YIN pitch detection on the DSP queue and yield result.
+    nonisolated private static func processYIN(
+        samples: [Float],
+        amplitude: Double,
+        sampleRate: Double,
+        continuation: AsyncStream<PitchResult>.Continuation,
+        refPitch: Double,
+        yinThreshold: Double
+    ) {
         let detection = detectPitchWithConfidence(
-            buffer: channelData, frameCount: frameLength,
-            sampleRate: buffer.format.sampleRate, threshold: yinThreshold
+            samples: samples, sampleRate: sampleRate, threshold: yinThreshold
         )
 
         guard detection.frequency > 0,
@@ -124,26 +160,41 @@ public final class YINPitchDetector: PitchDetectorProtocol {
     /// Returns both the detected frequency and a confidence metric based on
     /// YIN's cumulative mean normalized difference function (CMNDF).
     /// Confidence = 1.0 - cmndf[bestTau], which naturally measures signal clarity.
+    ///
+    /// AUD-004: The O(n²) scalar difference function is replaced with vDSP
+    /// operations. For each tau: d(tau) = sum_i (x[i] - x[i+tau])²
+    ///   = sum(x[i]²) + sum(x[i+tau]²) - 2*sum(x[i]*x[i+tau])
+    /// This is energy[0] + energy[tau_offset] - 2*xcorr[tau], computable
+    /// with three vDSP calls per tau instead of halfLength scalar mults.
     nonisolated private static func detectPitchWithConfidence(
-        buffer: UnsafePointer<Float>,
-        frameCount: Int,
+        samples: [Float],
         sampleRate: Double,
         threshold: Double
     ) -> YINDetectionResult {
+        let frameCount = samples.count
         let halfLength = frameCount / 2
         guard halfLength > 0 else {
             return YINDetectionResult(frequency: 0, confidence: 0)
         }
 
-        // Step 1: Compute difference function d(tau)
+        // Step 1: Compute difference function d(tau) using vDSP (AUD-004).
+        // d(tau) = Σ(x[i] - x[i+tau])² = energy0 + energyTau - 2·xcorr(tau)
         var difference = [Float](repeating: 0, count: halfLength)
-        for tau in 0..<halfLength {
-            var sum: Float = 0
-            for i in 0..<halfLength {
-                let delta = buffer[i] - buffer[i + tau]
-                sum += delta * delta
+        samples.withUnsafeBufferPointer { ptr in
+            guard let base = ptr.baseAddress else { return }
+            // Precompute energy[0] = Σ x[i]² for i in 0..<halfLength
+            var energy0: Float = 0
+            vDSP_dotpr(base, 1, base, 1, &energy0, vDSP_Length(halfLength))
+
+            for tau in 0..<halfLength {
+                let tauLen = vDSP_Length(halfLength - tau)
+                guard tauLen > 0 else { continue }
+                var xcorr: Float = 0
+                var energyTau: Float = 0
+                vDSP_dotpr(base, 1, base + tau, 1, &xcorr, tauLen)
+                vDSP_dotpr(base + tau, 1, base + tau, 1, &energyTau, tauLen)
+                difference[tau] = energy0 + energyTau - 2.0 * xcorr
             }
-            difference[tau] = sum
         }
 
         // Step 2: Cumulative mean normalized difference function d'(tau)

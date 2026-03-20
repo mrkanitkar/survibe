@@ -38,6 +38,22 @@ public final class AudioKitPitchDetector: PitchDetectorProtocol {
     /// Reference pitch for frequency-to-note conversion (default: A4 = 440 Hz).
     public var referencePitch: Double = 440.0
 
+    /// AUD-022: Minimum detectable frequency in Hz (default: 50 Hz, below A1 = 55 Hz).
+    ///
+    /// Lowering this value allows detection of very deep bass pitches but
+    /// increases false-positive rate at the cost of slightly higher CPU for
+    /// more lag candidates in autocorrelation. Raising it (e.g. 80 Hz) reduces
+    /// noise for applications limited to tenor range and above.
+    public var minimumFrequency: Double = 50.0
+
+    /// AUD-022: Maximum detectable frequency in Hz (default: 4000 Hz, above E8 = 5274 Hz
+    /// but well within the piano's practical range of C8 = 4186 Hz).
+    ///
+    /// Raising this value allows detection of very high-pitched notes but
+    /// requires more autocorrelation precision. Typical piano practice range
+    /// is C2–C8 (65–4186 Hz), so 4200 Hz is a safe ceiling.
+    public var maximumFrequency: Double = 4000.0
+
     /// Number of audio buffers received (for diagnostics).
     public private(set) var bufferCount: Int = 0
 
@@ -60,6 +76,11 @@ public final class AudioKitPitchDetector: PitchDetectorProtocol {
         // is deallocated without an explicit stop() call.
         // Note: AudioEngineManager cleanup must happen on MainActor via Task.
         if isDetecting {
+            // AUD-012: Assert in debug builds — callers should always call stop()
+            // before releasing the detector to ensure clean tap removal.
+            #if DEBUG
+            assertionFailure("AudioKitPitchDetector deallocated while still detecting. Call stop() first.")
+            #endif
             continuation?.finish()
             Task { @MainActor in
                 AudioEngineManager.shared.removeMicTap()
@@ -75,9 +96,14 @@ public final class AudioKitPitchDetector: PitchDetectorProtocol {
         status = "Starting..."
 
         let refPitch = referencePitch
+        let minFreq = minimumFrequency
+        let maxFreq = maximumFrequency
 
+        // AUD-023: bufferingNewest(3) instead of (1) so a brief main-thread
+        // stall does not silently drop pitch results — consumers see up to 3
+        // queued results before older ones are evicted.
         let stream = AsyncStream<PitchResult>(
-            bufferingPolicy: .bufferingNewest(1)
+            bufferingPolicy: .bufferingNewest(3)
         ) { continuation in
             self.continuation = continuation
             self.isDetecting = true
@@ -89,7 +115,8 @@ public final class AudioKitPitchDetector: PitchDetectorProtocol {
             AudioEngineManager.shared.installMicTap { buffer, _ in
                 Self.handleMicBuffer(
                     buffer, counter: counter, queue: queue,
-                    continuation: continuation, refPitch: refPitch
+                    continuation: continuation, refPitch: refPitch,
+                    minFreq: minFreq, maxFreq: maxFreq
                 )
             }
 
@@ -128,28 +155,36 @@ public final class AudioKitPitchDetector: PitchDetectorProtocol {
         counter: AtomicCounter,
         queue: DispatchQueue,
         continuation: AsyncStream<PitchResult>.Continuation,
-        refPitch: Double
+        refPitch: Double,
+        minFreq: Double,
+        maxFreq: Double
     ) {
         guard let channelData = buffer.floatChannelData?[0] else { return }
         let frameLength = Int(buffer.frameLength)
         guard frameLength > 0 else { return }
         let sampleRate = buffer.format.sampleRate
-        let samples = Array(
-            UnsafeBufferPointer(start: channelData, count: frameLength)
-        )
 
+        // AUD-001: copy samples synchronously (Array() construction) inside the callback
+        // so the pointer remains valid. The copy is small (2048 floats = 8KB) and
+        // immediately dispatched to the DSP queue. The audio thread does the copy here
+        // rather than deferring an unsafe pointer across thread boundaries.
+        let samples = Array(UnsafeBufferPointer(start: channelData, count: frameLength))
         let count = counter.increment()
+
+        #if DEBUG
+        // AUD-011: diagnostic log — debug builds only.
         if count % 50 == 1 {
             pitchLogger.info(
                 "Tap buffer #\(count): frames=\(frameLength) rate=\(sampleRate)"
             )
         }
+        #endif
 
         queue.async {
             processBuffer(
                 samples: samples, sampleRate: sampleRate,
                 bufferCount: count, continuation: continuation,
-                refPitch: refPitch
+                refPitch: refPitch, minFreq: minFreq, maxFreq: maxFreq
             )
         }
     }
@@ -160,15 +195,20 @@ public final class AudioKitPitchDetector: PitchDetectorProtocol {
         sampleRate: Double,
         bufferCount: Int,
         continuation: AsyncStream<PitchResult>.Continuation,
-        refPitch: Double
+        refPitch: Double,
+        minFreq: Double,
+        maxFreq: Double
     ) {
         let amplitude = calculateRMS(samples)
 
+        #if DEBUG
+        // AUD-011: diagnostic log — debug builds only.
         if bufferCount % 50 == 1 {
             pitchLogger.info(
                 "Buffer #\(bufferCount) amp=\(String(format: "%.6f", amplitude))"
             )
         }
+        #endif
 
         guard amplitude > 0.002 else {
             continuation.yield(silenceResult(amplitude: amplitude))
@@ -176,14 +216,17 @@ public final class AudioKitPitchDetector: PitchDetectorProtocol {
         }
 
         let detection = detectPitchWithConfidence(
-            samples: samples, sampleRate: sampleRate
+            samples: samples, sampleRate: sampleRate,
+            minFreq: minFreq, maxFreq: maxFreq
         )
 
+        #if DEBUG
         if bufferCount % 20 == 1 {
             let ampStr = String(format: "%.4f", amplitude)
             let freqStr = String(format: "%.1f", detection.frequency)
             pitchLogger.info("DSP: amp=\(ampStr) freq=\(freqStr)")
         }
+        #endif
 
         guard detection.frequency > 0,
               let (noteName, octave, cents) = try? SwarUtility.frequencyToNote(
@@ -200,11 +243,13 @@ public final class AudioKitPitchDetector: PitchDetectorProtocol {
             noteName: noteName, octave: octave,
             centsOffset: cents, confidence: confidence
         )
+        #if DEBUG
         let ampStr = String(format: "%.4f", amplitude)
         let freqStr = String(format: "%.1f", detection.frequency)
         pitchLogger.info(
             "DETECTED: \(noteName)\(octave) \(freqStr)Hz amp=\(ampStr)"
         )
+        #endif
         continuation.yield(result)
     }
 
@@ -242,9 +287,17 @@ public final class AudioKitPitchDetector: PitchDetectorProtocol {
     /// Returns both the detected frequency and a confidence metric based on
     /// peak-to-sidelobe ratio (via `SpectralConfidence`), replacing the
     /// naive amplitude-based heuristic.
+    ///
+    /// - Parameters:
+    ///   - samples: Audio sample buffer.
+    ///   - sampleRate: Sample rate in Hz.
+    ///   - minFreq: AUD-022: Lower frequency bound (Hz). Default 50 Hz.
+    ///   - maxFreq: AUD-022: Upper frequency bound (Hz). Default 4000 Hz.
     nonisolated private static func detectPitchWithConfidence(
         samples: [Float],
-        sampleRate: Double
+        sampleRate: Double,
+        minFreq: Double = 50.0,
+        maxFreq: Double = 4000.0
     ) -> PitchDetectionResult {
         let autocorrelation = computeAutocorrelation(samples)
         guard !autocorrelation.isEmpty else {
@@ -272,7 +325,8 @@ public final class AudioKitPitchDetector: PitchDetectorProtocol {
         }
 
         let frequency = sampleRate / refinedLag
-        guard frequency > 50, frequency < 4000 else {
+        // AUD-022: Use configurable frequency bounds instead of hardcoded 50–4000 Hz.
+        guard frequency > minFreq, frequency < maxFreq else {
             return PitchDetectionResult(frequency: 0, confidence: 0)
         }
 

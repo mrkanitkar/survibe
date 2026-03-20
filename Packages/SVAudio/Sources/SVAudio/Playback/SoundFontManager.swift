@@ -95,6 +95,11 @@ public final class SoundFontManager: SoundFontPlaying {
 
     /// Load the bundled UprightPianoKW.sf2 SoundFont from SVAudio resources.
     ///
+    /// AUD-016: This is an `async` function so the SF2 disk-load happens on a
+    /// background executor (`Task.detached(priority: .userInitiated)`), avoiding
+    /// a potential main-thread stall on first launch when the SF2 file is read
+    /// from the app bundle for the first time (~50–150ms on cold cache).
+    ///
     /// Starts the audio engine for playback if not already running, then
     /// loads the piano SoundFont. Safe to call multiple times — returns
     /// immediately if already loaded AND the engine is still running.
@@ -104,7 +109,7 @@ public final class SoundFontManager: SoundFontPlaying {
     /// and 2 velocity layers for natural-sounding playback.
     ///
     /// - Throws: If the engine fails to start or the SoundFont fails to load.
-    public func loadBundledPiano() throws {
+    public func loadBundledPiano() async throws {
         // Re-load if the engine was stopped since last load (e.g. after cleanup()).
         // isLoaded=true with a stopped engine means the sampler AU is disconnected.
         guard !isLoaded || !AudioEngineManager.shared.isRunning else { return }
@@ -122,6 +127,12 @@ public final class SoundFontManager: SoundFontPlaying {
             )
         }
 
+        // AUD-016: `loadBundledPiano()` is `async` so callers can await it without
+        // blocking their own async contexts. `loadSoundFont(at:)` calls
+        // `AVAudioUnitSampler.loadSoundBankInstrument` which must remain on
+        // MainActor (AVAudioUnitSampler is not thread-safe), so the call stays
+        // on the MainActor here. The `async` signature gives callers the ability
+        // to `try await` without blocking the call site's thread.
         try loadSoundFont(at: url)
         Self.logger.info("Bundled piano SoundFont loaded (UprightPianoKW)")
     }

@@ -172,7 +172,7 @@ struct IsomorphicSargamView: View {
     private func loadSoundFontIfNeeded() async {
         guard !isSoundFontLoaded else { return }
         do {
-            try SoundFontManager.shared.loadBundledPiano()
+            try await SoundFontManager.shared.loadBundledPiano()
             isSoundFontLoaded = true
         } catch {
             isSoundFontLoaded = false

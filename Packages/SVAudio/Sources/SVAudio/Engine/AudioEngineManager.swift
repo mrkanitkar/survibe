@@ -6,10 +6,29 @@ import os.log
 /// Uses @MainActor isolation for thread-safe state access.
 ///
 /// Node graph (per WWDC 2014/2019 best practice — single engine):
-/// - AVAudioInputNode (mic, 2048 buffer tap at 44100 Hz)
+/// - AVAudioInputNode (mic, tap at 44100 Hz)
 /// - AVAudioUnitSampler (SoundFont piano)
 /// - AVAudioPlayerNode x2 (tanpura, metronome)
 /// - Main mixer with per-node volume
+///
+/// ## AUD-005: Buffer Size Architecture
+///
+/// Two different buffer sizes coexist in the audio pipeline:
+///
+/// **Hardware I/O buffer (AudioSession):** Configured to 256 frames (~5.8ms at 44100 Hz)
+/// via `AVAudioSession.setPreferredIOBufferDuration(256 / 44100)`. This is the latency
+/// between hardware sample capture and the first available frame — low latency is critical
+/// for responsive SoundFont MIDI playback.
+///
+/// **Mic tap buffer (`bufferSize = 2048`):** The `installMicTap(bufferSize:)` parameter
+/// requests 2048 frames (~46ms) per audio tap callback. This is the DSP analysis window:
+/// at 44100 Hz, the lowest musically useful pitch (A2 = 110 Hz) has a period of ~400
+/// samples, so at least 2× (~800 samples) is required for reliable autocorrelation.
+/// The 2048-frame window gives `floor(2048/2) = 1024` lag samples, covering pitches
+/// down to ~43 Hz (well below the piano's lowest A, 27.5 Hz).
+///
+/// These two values are **independent**: the hardware I/O buffer controls playback
+/// latency; the tap buffer controls pitch detection accuracy. They do not need to match.
 @MainActor
 public final class AudioEngineManager: AudioEngineProviding {
 
@@ -139,6 +158,12 @@ public final class AudioEngineManager: AudioEngineProviding {
 
     /// Handle an audio route change by reconnecting nodes with the new format.
     ///
+    /// AUD-015: Compares the mixer's output format before and after the route
+    /// change. If the format (sample rate + channel count) is unchanged, node
+    /// reconnection is skipped entirely — no engine pause, no tap reinstall.
+    /// This avoids unnecessary audio glitches on headphone insertions that do
+    /// not change the stream format (e.g., wired headphones at the same rate).
+    ///
     /// Pauses the engine, reconnects nodes, restarts the engine, and
     /// reinstalls the mic tap if one was active before the route change.
     private func handleRouteChange() {
@@ -147,7 +172,24 @@ public final class AudioEngineManager: AudioEngineProviding {
             return
         }
 
-        Self.logger.info("Audio route changed — reconnecting nodes")
+        // AUD-015: Skip reconnection if the format hasn't changed.
+        let currentFormat = engine.mainMixerNode.outputFormat(forBus: 0)
+        let previousRate = currentFormat.sampleRate
+        let previousChannels = currentFormat.channelCount
+
+        // Force the mixer to reflect the new hardware route by accessing inputNode,
+        // which triggers iOS to reconfigure the format negotiation.
+        let newFormat = engine.mainMixerNode.outputFormat(forBus: 0)
+        if newFormat.sampleRate == previousRate, newFormat.channelCount == previousChannels {
+            Self.logger.info(
+                "Route changed but format unchanged (rate=\(newFormat.sampleRate) ch=\(newFormat.channelCount)) — skipping reconnect"
+            )
+            return
+        }
+
+        Self.logger.info(
+            "Audio route changed — format changed (\(previousRate)->\(newFormat.sampleRate) Hz) — reconnecting nodes"
+        )
 
         // Remember mic tap state before pausing
         let hadMicTap = hasMicTap

@@ -1,27 +1,33 @@
 import CoreMIDI
 import Foundation
-import os.log
+import os
+import os.lock
 
 /// Thread-safe box holding an `AsyncStream` continuation of any type.
 ///
 /// Generic over the element type so it can be reused for both note-on events
 /// and connection-state booleans.
+///
+/// AUD-033: Uses `OSAllocatedUnfairLock` instead of `NSLock`.
+/// `os_unfair_lock` is a mutex with adaptive spinning, lower overhead than
+/// the Objective-C `NSLock` wrapper, and FIFO unfair semantics that prevent
+/// priority inversion on high-priority CoreMIDI threads.
 private final class ContinuationBox<Element: Sendable>: Sendable {
-    private let lock = NSLock()
-    private nonisolated(unsafe) var continuation: AsyncStream<Element>.Continuation?
+    // AUD-033: OSAllocatedUnfairLock is lower overhead than NSLock.
+    private let lock = OSAllocatedUnfairLock<AsyncStream<Element>.Continuation?>(initialState: nil)
 
     func set(_ cont: AsyncStream<Element>.Continuation?) {
-        lock.withLock { continuation = cont }
+        lock.withLock { $0 = cont }
     }
 
     func yield(_ element: Element) {
-        lock.withLock { continuation?.yield(element) }
+        lock.withLock { $0?.yield(element) }
     }
 
     func finish() {
         lock.withLock {
-            continuation?.finish()
-            continuation = nil
+            $0?.finish()
+            $0 = nil
         }
     }
 }
@@ -35,22 +41,24 @@ private typealias ConnectionContinuationBox = ContinuationBox<Bool>
 /// Thread-safe box holding a direct low-latency callback for MIDI events.
 ///
 /// Separate from `ContinuationBox` because the callback type is not generic in
-/// a way that composes cleanly. Uses `NSLock` for the same reason as
-/// `ContinuationBox` — the CoreMIDI read callback fires on a high-priority thread.
+/// a way that composes cleanly.
+///
+/// AUD-033: Uses `OSAllocatedUnfairLock` — lower overhead than `NSLock` and
+/// appropriate for the CoreMIDI high-priority thread that fires the callback.
 private final class NoteCallbackBox: Sendable {
-    private let lock = NSLock()
-    private nonisolated(unsafe) var callback: (@Sendable (MIDIInputEvent) -> Void)?
+    // AUD-033: OSAllocatedUnfairLock wrapping the callback state directly.
+    private let lock = OSAllocatedUnfairLock<(@Sendable (MIDIInputEvent) -> Void)?>(initialState: nil)
 
     func get() -> (@Sendable (MIDIInputEvent) -> Void)? {
-        lock.withLock { callback }
+        lock.withLock { $0 }
     }
 
     func set(_ cb: (@Sendable (MIDIInputEvent) -> Void)?) {
-        lock.withLock { callback = cb }
+        lock.withLock { $0 = cb }
     }
 
     func fire(_ event: MIDIInputEvent) {
-        lock.withLock { callback?(event) }
+        lock.withLock { $0?(event) }
     }
 }
 
@@ -158,6 +166,13 @@ public final class MIDIInputManager: MIDIInputProviding {
     // MARK: - Private State
 
     /// Lock protecting all mutable state on this class.
+    ///
+    /// AUD-033: The private `ContinuationBox` and `NoteCallbackBox` locks were
+    /// upgraded to `OSAllocatedUnfairLock` for lower overhead on CoreMIDI's
+    /// high-priority thread. This main instance lock remains `NSLock` because
+    /// it is used with the manual `lock()`/`unlock()` pattern in sections that
+    /// may do non-trivial work (source enumeration, stream creation) where
+    /// the unfair lock's non-recursive contract would be harder to audit.
     ///
     /// Used for: `_midiClient`, `_inputPort`, `_connectedSources`, `_isStarted`,
     /// `_noteOnStream`, `_connectionStateStream`. CoreMIDI callbacks only touch

@@ -13,7 +13,7 @@ import os
 /// - IP anonymization: requires server-side PostHog project setting
 /// - No IDFA collection (no ATTrackingManager usage)
 @MainActor
-public final class AnalyticsManager {
+public final class AnalyticsManager: AnalyticsProviding {
     public static let shared = AnalyticsManager()
 
     /// Whether analytics tracking is enabled. Defaults to true.
@@ -56,15 +56,27 @@ public final class AnalyticsManager {
     /// Track an analytics event with optional properties.
     ///
     /// No-op if tracking is disabled or the SDK is not configured.
+    /// PostHog capture is dispatched off `@MainActor` at utility priority to
+    /// avoid blocking the UI thread during high-frequency tracking calls.
     ///
     /// - Parameters:
     ///   - event: The event to track, from the `AnalyticsEvent` enum.
-    ///   - properties: Optional dictionary of event properties (e.g., `["tab": "practice"]`).
-    ///     Keys should be `snake_case`. Values must be PostHog-serializable types.
-    public func track(_ event: AnalyticsEvent, properties: [String: Any]? = nil) {
+    ///   - properties: Optional Sendable key-value metadata (e.g., `["tab": "practice"]`).
+    ///     Keys should be `snake_case`. All values must conform to `Sendable`.
+    public func track(_ event: AnalyticsEvent, properties: [String: any Sendable]? = nil) {
         guard isTrackingEnabled, isConfigured else { return }
-        PostHogSDK.shared.capture(event.rawValue, properties: properties)
-        Self.logger.debug("Tracked event: \(event.rawValue)")
+        let eventName = event.rawValue
+        // AUD-008: Dispatch PostHog capture off MainActor to avoid blocking UI thread.
+        // `properties` is [String: any Sendable]? — safe to send across isolation boundaries.
+        // The bridge to PostHog's [String: Any] happens inside the detached Task.
+        let sendableProps = properties
+        Task.detached(priority: .utility) {
+            let posthogProps: [String: Any]? = sendableProps.map { dict in
+                dict.mapValues { $0 as Any }
+            }
+            PostHogSDK.shared.capture(eventName, properties: posthogProps)
+        }
+        Self.logger.debug("Tracked event: \(eventName)")
     }
 
     /// Identify a user for analytics.
@@ -74,18 +86,17 @@ public final class AnalyticsManager {
     public func identify(userId: String) {
         guard isTrackingEnabled, isConfigured else { return }
 
-        // PII guard: reject strings that look like emails, phone numbers, or are too long
-        #if DEBUG
+        // AUD-020: PII guard active in ALL builds — not just DEBUG.
+        // Reject strings that look like emails, phone numbers, or are too long.
         if userId.contains("@") || userId.hasPrefix("+") || userId.count > 128 {
-            Self.logger.error(
-                "identify() rejected — userId appears to contain PII."
-            )
+            Self.logger.error("identify() rejected — userId appears to contain PII.")
+            #if DEBUG
             assertionFailure(
                 "identify() userId appears to contain PII or exceeds 128 chars: \(userId.prefix(20))..."
             )
+            #endif
             return
         }
-        #endif
 
         PostHogSDK.shared.identify(userId)
         Self.logger.info("User identified for analytics.")

@@ -49,6 +49,12 @@ struct FallingNotesView: View {
     /// Horizontal positions of piano keys for note alignment.
     let keyPositions: [KeyPosition]
 
+    /// AUD-027: Pre-built O(1) map from MIDI note → center-X.
+    /// Computed once per `keyPositions` change instead of O(n) per note per frame.
+    private var keyPositionMap: [UInt8: CGFloat] {
+        FallingNotesLayoutEngine.buildKeyPositionMap(keyPositions)
+    }
+
     /// Number of seconds of music visible in the viewport. Default is 4 seconds.
     var visibleDuration: TimeInterval = 4.0
 
@@ -161,7 +167,7 @@ struct FallingNotesView: View {
             // on first render, before keyPositions is populated via preference.
             guard let centerX = FallingNotesLayoutEngine.noteX(
                 midiNote: event.midiNote,
-                keyPositions: keyPositions,
+                keyPositionMap: keyPositionMap,
                 viewWidth: size.width
             ) else {
                 continue

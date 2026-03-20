@@ -97,11 +97,11 @@ struct SongPlayAlongView: View {
             CompactScoringHUD(
                 accuracy: viewModel.accuracy,
                 streak: viewModel.streak,
-                notesHit: viewModel.noteScores.filter { $0.grade != .miss }.count,
+                notesHit: viewModel.notesHit,
                 totalNotes: viewModel.noteEvents.count,
                 isVisible: viewModel.playbackState == .playing
                     || viewModel.playbackState == .paused
-                    || (viewModel.playbackState == .idle && !viewModel.noteScores.isEmpty)
+                    || (viewModel.playbackState == .idle && viewModel.notesHit > 0)
             )
 
             // Pitch proximity feedback (shown when a note is detected from mic)
@@ -184,7 +184,7 @@ struct SongPlayAlongView: View {
             PlayAlongResultsOverlay(
                 songTitle: song.title,
                 accuracy: viewModel.accuracy,
-                notesHit: viewModel.noteScores.filter { $0.grade != .miss }.count,
+                notesHit: viewModel.notesHit,
                 totalNotes: viewModel.noteEvents.count,
                 streak: viewModel.longestStreak,
                 starRating: viewModel.starRating,
@@ -270,7 +270,7 @@ struct SongPlayAlongView: View {
     /// If notes have been scored, completes the session to show results.
     /// Otherwise just cleans up and resets to idle.
     private func handleStop() {
-        if !viewModel.noteScores.isEmpty {
+        if viewModel.notesHit > 0 {
             viewModel.stopAndComplete()
         } else {
             viewModel.cleanup()
@@ -286,7 +286,7 @@ struct SongPlayAlongView: View {
         switch newState {
         case .stopped:
             // Show results when session completes naturally
-            if !viewModel.noteScores.isEmpty {
+            if viewModel.notesHit > 0 {
                 showResults = true
             }
         default:
